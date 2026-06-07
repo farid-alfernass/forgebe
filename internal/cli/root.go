@@ -7,10 +7,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var version = "dev"
-
-func SetVersion(v string) { version = v }
-
 func NewRootCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "forgebe",

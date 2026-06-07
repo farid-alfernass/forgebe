@@ -1,0 +1,55 @@
+before:
+  hooks:
+    - go mod tidy
+builds:
+  - env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    main: ./cmd/forgebe
+    ldflags:
+      - -s -w -X github.com/faridtriwicaksono/forgebe/internal/cli.version={{.Version}} -X github.com/faridtriwicaksono/forgebe/internal/cli.commit={{.ShortCommit}} -X github.com/faridtriwicaksono/forgebe/internal/cli.buildDate={{.Date}}
+
+archives:
+  - format: tar.gz
+    name_template: >-
+      {{ .ProjectName }}_
+      {{- .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else if eq .Arch "386" }}i386
+      {{- else }}{{ .Arch }}{{ end }}
+    format_overrides:
+      - goos: windows
+        format: zip
+
+checksum:
+  name_template: 'checksums.txt'
+
+snapshot:
+  name_template: "{{ incpatch .Version }}-next"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+
+brews:
+  - name: forgebe
+    repository:
+      owner: farid-alfernass
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    directory: Formula
+    homepage: "https://github.com/farid-alfernass/forgebe"
+    description: "AI-agnostic backend engineering framework"
+    license: "MIT"
+    test: |
+      system "#{bin}/forgebe version"
+    install: |
+      bin.install "forgebe"
