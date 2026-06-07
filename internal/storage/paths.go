@@ -3,24 +3,20 @@ package storage
 import (
 	"os"
 	"path/filepath"
+	"sort"
 )
 
 const (
 	// DefaultRootDir is the default ForgeBE home directory
 	DefaultRootDir = ".forgebe"
-
 	// ProjectsDirName is the subdirectory for project profiles
 	ProjectsDirName = "projects"
-
 	// ExportsDirName is the subdirectory for exports
 	ExportsDirName = "exports"
-
 	// CacheDirName is the subdirectory for cache
 	CacheDirName = "cache"
-
 	// TmpDirName is the subdirectory for temporary files
 	TmpDirName = "tmp"
-
 	// LogsDirName is the subdirectory for logs
 	LogsDirName = "logs"
 )
@@ -36,7 +32,6 @@ func NewPaths() (*Paths, error) {
 	if err != nil {
 		return nil, err
 	}
-
 	root := filepath.Join(home, DefaultRootDir)
 	return &Paths{root: root}, nil
 }
@@ -134,17 +129,31 @@ func (p *Paths) EnsureDirectories() error {
 		p.TmpDir(),
 		p.LogsDir(),
 	}
-
 	for _, dir := range dirs {
 		if err := os.MkdirAll(dir, 0755); err != nil {
 			return err
 		}
 	}
-
 	return nil
 }
 
 // EnsureProjectDir creates the directory for a specific project
 func (p *Paths) EnsureProjectDir(projectID string) error {
 	return os.MkdirAll(p.ProjectDir(projectID), 0755)
+}
+
+// ListProjectIDs returns all local project IDs sorted alphabetically.
+func ListProjectIDs(p *Paths) ([]string, error) {
+	entries, err := os.ReadDir(p.ProjectsDir())
+	if err != nil {
+		return nil, err
+	}
+	ids := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		if entry.IsDir() {
+			ids = append(ids, entry.Name())
+		}
+	}
+	sort.Strings(ids)
+	return ids, nil
 }
