@@ -43,6 +43,13 @@ forgebe brief claude
 
 # Export adapter files
 forgebe export adapter cursor
+
+# Sync AI context files into the project root
+forgebe sync --dry-run
+forgebe sync
+
+# Keep AI context files up-to-date while coding
+forgebe watch
 ```
 
 See [docs/cli-reference.md](docs/cli-reference.md) for the full reference.

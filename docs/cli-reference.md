@@ -280,6 +280,90 @@ scp forgebe-backup.zip user@remote:~/
 
 ---
 
+### `forgebe sync`
+
+Generate and update AI context files directly in the project root from the active ForgeBE profile.
+
+**Usage:**
+```bash
+forgebe sync [project-id] [--dry-run] [--force] [--json]
+```
+
+**Arguments:**
+- `project-id` — Project ID (default: auto-detect from local ForgeBE projects)
+
+**Flags:**
+- `--dry-run` — Show files that would be written without modifying the repository
+- `--force, -f` — Rewrite files even when content is already up-to-date
+
+**Generated files:**
+- `CLAUDE.md`
+- `AGENTS.md`
+- `.cursorrules`
+- `.github/copilot-instructions.md`
+- `AI_CONTEXT.md`
+
+**Safety note:**
+`forgebe sync` writes to the repository root. Use `--dry-run` before first use on an existing project.
+
+**Example:**
+```bash
+# Preview changes
+forgebe sync --dry-run
+
+# Write/update context files
+forgebe sync
+```
+
+---
+
+### `forgebe status`
+
+Show whether generated AI context files are present and up-to-date for a project.
+
+**Usage:**
+```bash
+forgebe status [project-id] [--json]
+```
+
+**Example output:**
+```text
+ForgeBE Context Status for project: forgebe_df5dcae6
+Repository: /Users/raihan/forgebe
+Last sync: 2026-06-07T18:09:55+07:00
+
+Synced files:
+  - CLAUDE.md (claude)
+  - AGENTS.md (hermes)
+
+All context files are up-to-date.
+```
+
+---
+
+### `forgebe watch`
+
+Run a long-lived watcher that performs an initial sync and automatically re-syncs AI context files when relevant project files change.
+
+**Usage:**
+```bash
+forgebe watch [project-id]
+```
+
+**Watched file categories:**
+- Language/package manifests: `go.mod`, `package.json`, `Cargo.toml`, `pyproject.toml`, etc.
+- Source roots: `cmd/`, `internal/`, `pkg/`, `src/`, `api/`, etc.
+- Build/config files: `Dockerfile`, `Makefile`, `.env`, `tsconfig.json`, etc.
+
+**Example:**
+```bash
+forgebe watch forgebe_df5dcae6
+```
+
+Press `Ctrl+C` to stop.
+
+---
+
 ### `forgebe import`
 
 Restore a `.forgebe.zip` bundle into local ForgeBE storage.
