@@ -51,6 +51,24 @@ func (p *Paths) Root() string {
 	return p.root
 }
 
+// EnsureBaseDirs creates the ForgeBE root directory and all standard subdirectories.
+func (p *Paths) EnsureBaseDirs() error {
+	dirs := []string{
+		p.root,
+		p.ProjectsDir(),
+		p.ExportsDir(),
+		p.CacheDir(),
+		p.TmpDir(),
+		p.LogsDir(),
+	}
+	for _, d := range dirs {
+		if err := os.MkdirAll(d, 0700); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // ProjectsDir returns the projects directory
 func (p *Paths) ProjectsDir() string {
 	return filepath.Join(p.root, ProjectsDirName)
