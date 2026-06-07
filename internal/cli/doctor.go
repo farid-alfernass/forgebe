@@ -10,101 +10,141 @@ import (
 	"github.com/spf13/cobra"
 )
 
-const doctorBanner = "ForgeBE Doctor — Project Health Check"
+const doctorBanner = "ForgeBE Doctor — Project Health Check\n"
 
 func newDoctorCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "doctor [project-id]",
-		Short: "Validate ForgeBE local state and project profile",
+		Short: "Validate the ForgeBE setup and project profile",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
-			fmt.Fprintln(cmd.OutOrStdout(), doctorBanner)
-
 			paths, err := storage.NewPaths()
 			if err != nil {
-				return fmt.Errorf("doctor: %w", err)
+				return err
+			}
+			if err := paths.EnsureBaseDirs(); err != nil {
+				return fmt.Errorf("doctor: initialize directories: %w", err)
 			}
 
-			forgebeOk := checkDir(cmd, "ForgeBE root", paths.Root())
-			projectsOk := checkDir(cmd, "Projects store", paths.ProjectsDir())
-			if !forgebeOk || !projectsOk {
-				fmt.Fprintln(cmd.OutOrStdout(), "\n  Run 'forgebe init' to set up ForgeBE for this project.")
+			// Collect issues
+			type checkItem struct {
+				Check   string `json:"check"`
+				Status  string `json:"status"`
+				Message string `json:"message,omitempty"`
+			}
+			var checks []checkItem
+
+			// Check root dir
+			rootDir := paths.Root()
+			if fi, err := os.Stat(rootDir); err == nil && fi.IsDir() {
+				checks = append(checks, checkItem{Check: "ForgeBE root directory", Status: "ok", Message: rootDir})
+			} else {
+				checks = append(checks, checkItem{Check: "ForgeBE root directory", Status: "error", Message: "not found or inaccessible"})
+			}
+
+			// Check projects dir
+			projDir := paths.ProjectsDir()
+			if fi, err := os.Stat(projDir); err == nil && fi.IsDir() {
+				checks = append(checks, checkItem{Check: "Projects store", Status: "ok", Message: projDir})
+			} else {
+				checks = append(checks, checkItem{Check: "Projects store", Status: "error", Message: "not found"})
+			}
+
+			// Resolve project ID
+			projectID := ""
+			if len(args) == 1 {
+				projectID = args[0]
+			} else {
+				// Look for an existing project
+				ids, _ := storage.ListProjectIDs(paths)
+				if len(ids) > 0 {
+					projectID = ids[0]
+				}
+			}
+
+			if projectID == "" || !dirExists(paths.ProjectDir(projectID)) {
+				if OutputJSON(cmd) {
+					result := map[string]interface{}{
+						"valid":  false,
+						"checks": checks,
+					}
+					return WriteOutput(cmd, "", result)
+				}
+				fmt.Fprint(cmd.OutOrStdout(), doctorBanner)
+				for _, c := range checks {
+					fmt.Fprintf(cmd.OutOrStdout(), "  %s %s\n", statusIcon(c.Status), c.Check)
+				}
+				fmt.Fprintln(cmd.OutOrStdout(), "\n  No project profile found. Run `forgebe init` first.")
 				return nil
 			}
 
-			if len(args) == 1 {
-				return validateSingle(cmd, paths, args[0])
+			// Validate profile
+			store := profile.NewStore(paths)
+			p, err := store.LoadProfile(projectID)
+			if err != nil {
+				if OutputJSON(cmd) {
+					result := map[string]interface{}{
+						"valid":   false,
+						"project": projectID,
+						"error":   err.Error(),
+						"checks":  checks,
+					}
+					return WriteOutput(cmd, "", result)
+				}
+				fmt.Fprintf(cmd.OutOrStdout(), "\n  Profile: %s\n  Error loading profile: %v\n", projectID, err)
+				return nil
 			}
-			return validateDefaultOrList(cmd, paths)
+
+			result := profile.ValidateProjectProfile(p)
+
+			if OutputJSON(cmd) {
+				jsonResult := map[string]interface{}{
+					"valid":    result.Valid,
+					"project":  projectID,
+					"name":     p.Project.Name,
+					"language": p.Stack.PrimaryLanguage,
+					"checks":   checks,
+					"issues":   result.Issues,
+				}
+				return WriteOutput(cmd, "", jsonResult)
+			}
+
+			// Text output
+			fmt.Fprint(cmd.OutOrStdout(), doctorBanner)
+			for _, c := range checks {
+				fmt.Fprintf(cmd.OutOrStdout(), "  %s %s\n", statusIcon(c.Status), c.Check)
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "\n  Profile: %s\n  Project: %s (%s)\n", projectID, p.Project.Name, p.Stack.PrimaryLanguage)
+			if result.Valid {
+				fmt.Fprintln(cmd.OutOrStdout(), "  Status: All checks passed")
+			} else {
+				fmt.Fprintln(cmd.OutOrStdout(), "  Status: Issues found")
+				sort.Slice(result.Issues, func(i, j int) bool { return result.Issues[i].Severity < result.Issues[j].Severity })
+				for _, issue := range result.Issues {
+					fmt.Fprintf(cmd.OutOrStdout(), "    %s [%s] %s\n", issue.Severity, issue.Field, issue.Message)
+				}
+			}
+			return nil
 		},
-		SilenceUsage: true,
+		SilenceUsage:  true,
+		SilenceErrors: false,
 	}
 }
 
-func checkDir(cmd *cobra.Command, label, path string) bool {
-	info, err := os.Stat(path)
-	if err != nil {
-		fmt.Fprintf(cmd.OutOrStdout(), "  ❌ %s: %v\n", label, err)
-		return false
-	}
-	if info.IsDir() {
-		fmt.Fprintf(cmd.OutOrStdout(), "  ✅ %s: %s\n", label, path)
-		return true
-	}
-	fmt.Fprintf(cmd.OutOrStdout(), "  ❌ %s: not a directory\n", label)
-	return false
+func dirExists(path string) bool {
+	fi, err := os.Stat(path)
+	return err == nil && fi.IsDir()
 }
 
-func validateSingle(cmd *cobra.Command, paths *storage.Paths, projectID string) error {
-	store := profile.NewStore(paths)
-	p, err := store.LoadProfile(projectID)
-	if err != nil {
-		return fmt.Errorf("doctor: load profile: %w", err)
+func statusIcon(s string) string {
+	switch s {
+	case "ok":
+		return "✅"
+	case "error":
+		return "❌"
+	case "warning":
+		return "⚠️"
+	default:
+		return "•"
 	}
-
-	result := profile.ValidateProjectProfile(p)
-	fmt.Fprintf(cmd.OutOrStdout(), "\n  Profile: %s\n", projectID)
-	fmt.Fprintf(cmd.OutOrStdout(), "  Project: %s (%s)\n", p.Project.Name, p.Stack.PrimaryLanguage)
-	fmt.Fprintf(cmd.OutOrStdout(), "  Status: %s\n\n", result.Summary)
-
-	icons := map[string]string{"error": "❌", "warning": "⚠️", "info": "ℹ️"}
-	for _, issue := range result.Issues {
-		fmt.Fprintf(cmd.OutOrStdout(), "  %s [%s] %s\n", icons[issue.Severity], issue.Field, issue.Message)
-	}
-	return nil
-}
-
-func validateDefaultOrList(cmd *cobra.Command, paths *storage.Paths) error {
-	entries, err := os.ReadDir(paths.ProjectsDir())
-	if err != nil {
-		return fmt.Errorf("doctor: list projects: %w", err)
-	}
-	var projectDirs []string
-	for _, e := range entries {
-		if e.IsDir() {
-			projectDirs = append(projectDirs, e.Name())
-		}
-	}
-	sort.Strings(projectDirs)
-
-	if len(projectDirs) == 0 {
-		fmt.Fprintln(cmd.OutOrStdout(), "  No projects found.")
-		fmt.Fprintln(cmd.OutOrStdout(), "  Run 'forgebe init' to initialize a project.")
-		return nil
-	}
-	if len(projectDirs) == 1 {
-		return validateSingle(cmd, paths, projectDirs[0])
-	}
-
-	fmt.Fprintln(cmd.OutOrStdout(), "\n  Multiple projects found. Specify one:")
-	for _, dir := range projectDirs {
-		store := profile.NewStore(paths)
-		p, err := store.LoadProfile(dir)
-		if err == nil {
-			fmt.Fprintf(cmd.OutOrStdout(), "    %s  (%s)\n", dir, p.Project.Name)
-		} else {
-			fmt.Fprintf(cmd.OutOrStdout(), "    %s\n", dir)
-		}
-	}
-	return nil
 }

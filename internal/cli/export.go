@@ -23,7 +23,7 @@ func newExportCmd() *cobra.Command {
 }
 
 func newExportSummaryCmd() *cobra.Command {
-	return &cobra.Command{
+	cmd := &cobra.Command{
 		Use:   "summary [project-id]",
 		Short: "Export a compact project summary as markdown",
 		Args:  cobra.MaximumNArgs(1),
@@ -57,15 +57,32 @@ func newExportSummaryCmd() *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("export summary: render: %w", err)
 			}
+
+			if OutputJSON(cmd) {
+				return WriteOutput(cmd, "", map[string]string{"summary": summary, "project_id": projectID})
+			}
+
+			outPath := OutputPath(cmd)
+			if outPath != "" {
+				wrote, err := WriteOutputFile(cmd, summary, outPath)
+				if err != nil {
+					return err
+				}
+				fmt.Fprintf(cmd.OutOrStdout(), "Written to: %s\n", wrote)
+				return nil
+			}
+
 			fmt.Fprint(cmd.OutOrStdout(), summary)
 			return nil
 		},
 		SilenceUsage: true,
 	}
+	cmd.Flags().StringP("output", "o", "", "Write output to file instead of stdout")
+	return cmd
 }
 
 func newExportAdapterCmd() *cobra.Command {
-	return &cobra.Command{
+	cmd := &cobra.Command{
 		Use:   "adapter <tool> [project-id]",
 		Short: "Export a tool-specific adapter file",
 		Args:  cobra.RangeArgs(1, 2),
@@ -91,15 +108,23 @@ func newExportAdapterCmd() *cobra.Command {
 			if err := paths.EnsureBaseDirs(); err != nil {
 				return err
 			}
-			adapterPath := filepath.Join(paths.ExportsDir(), projectID+"-"+sanitizeToolName(tool)+"-"+filepath.Base(filename))
-			if err := storage.AtomicWrite(adapterPath, []byte(out), 0600); err != nil {
+
+			// Use --output if provided, else default exports dir
+			outPath := OutputPath(cmd)
+			if outPath == "" {
+				outPath = filepath.Join(paths.ExportsDir(), projectID+"-"+sanitizeToolName(tool)+"-"+filepath.Base(filename))
+			}
+
+			if err := storage.AtomicWrite(outPath, []byte(out), 0600); err != nil {
 				return fmt.Errorf("export adapter: write file: %w", err)
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "Exported: %s\n", adapterPath)
+			fmt.Fprintf(cmd.OutOrStdout(), "Exported: %s\n", outPath)
 			return nil
 		},
 		SilenceUsage: true,
 	}
+	cmd.Flags().StringP("output", "o", "", "Write output to file instead of default exports dir")
+	return cmd
 }
 
 func sanitizeToolName(v string) string {
@@ -116,25 +141,20 @@ func sanitizeToolName(v string) string {
 }
 
 func newExportBundleCmd() *cobra.Command {
-	return &cobra.Command{
-		Use:   "bundle [project-id] [output-path]",
+	cmd := &cobra.Command{
+		Use:   "bundle [project-id]",
 		Short: "Export a portable .forgebe.zip bundle",
-		Args:  cobra.MaximumNArgs(2),
+		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			paths, err := storage.NewPaths()
 			if err != nil {
 				return fmt.Errorf("export bundle: %w", err)
 			}
 
-			var projectID, outputPath string
-			switch len(args) {
-			case 2:
+			var projectID string
+			if len(args) == 1 {
 				projectID = args[0]
-				outputPath = args[1]
-			case 1:
-				projectID = args[0]
-				outputPath = export.DefaultBundlePath(projectID, paths)
-			case 0:
+			} else {
 				entries, err := storage.ListProjectIDs(paths)
 				if err != nil {
 					return fmt.Errorf("export bundle: list projects: %w", err)
@@ -143,15 +163,21 @@ func newExportBundleCmd() *cobra.Command {
 					return fmt.Errorf("export bundle: no projects found")
 				}
 				projectID = entries[len(entries)-1]
-				outputPath = export.DefaultBundlePath(projectID, paths)
 			}
 
-			if err := export.ExportBundle(projectID, paths, outputPath); err != nil {
+			outPath := OutputPath(cmd)
+			if outPath == "" {
+				outPath = export.DefaultBundlePath(projectID, paths)
+			}
+
+			if err := export.ExportBundle(projectID, paths, outPath); err != nil {
 				return fmt.Errorf("export bundle: %w", err)
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "Exported bundle: %s\n", outputPath)
+			fmt.Fprintf(cmd.OutOrStdout(), "Exported bundle: %s\n", outPath)
 			return nil
 		},
 		SilenceUsage: true,
 	}
+	cmd.Flags().StringP("output", "o", "", "Write bundle to specified path")
+	return cmd
 }

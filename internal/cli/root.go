@@ -17,6 +17,10 @@ func NewRootCmd() *cobra.Command {
 		Short: "ForgeBE is an AI-agnostic backend engineering framework",
 		Long:  "ForgeBE helps backend engineers keep AI-assisted delivery consistent, safe, local-first, and project-aware.",
 	}
+
+	// Persistent flags available to all commands
+	cmd.PersistentFlags().BoolP("json", "j", false, "Output in JSON format")
+
 	cmd.AddCommand(newVersionCmd())
 	cmd.AddCommand(newInitCmd())
 	cmd.AddCommand(newScanCmd())

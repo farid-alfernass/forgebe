@@ -1,13 +1,12 @@
 package cli
 
 import (
+	"encoding/json"
 	"fmt"
-	"os"
 
 	"github.com/faridtriwicaksono/forgebe/internal/discovery"
-	"gopkg.in/yaml.v3"
-
 	"github.com/spf13/cobra"
+	"gopkg.in/yaml.v3"
 )
 
 func newScanCmd() *cobra.Command {
@@ -27,25 +26,20 @@ func newScanCmd() *cobra.Command {
 				return err
 			}
 
+			if OutputJSON(cmd) {
+				enc := json.NewEncoder(cmd.OutOrStdout())
+				enc.SetIndent("", "  ")
+				return enc.Encode(report)
+			}
+
 			data, err := yaml.Marshal(report)
 			if err != nil {
 				return fmt.Errorf("scan: marshal report: %w", err)
 			}
 			_, err = cmd.OutOrStdout().Write(data)
-			if err != nil {
-				return fmt.Errorf("scan: write output: %w", err)
-			}
-			return nil
+			return err
 		},
 		SilenceUsage:  true,
 		SilenceErrors: false,
 	}
-}
-
-func mustGetwd() string {
-	wd, err := os.Getwd()
-	if err != nil {
-		return "."
-	}
-	return wd
 }

@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/faridtriwicaksono/forgebe/internal/discovery"
 	"github.com/faridtriwicaksono/forgebe/internal/profile"
 	"github.com/faridtriwicaksono/forgebe/internal/storage"
 	"github.com/spf13/cobra"
@@ -35,11 +34,7 @@ func newProfileShowCmd() *cobra.Command {
 				projectID = args[0]
 			} else {
 				wd, _ := os.Getwd()
-				scanner := discovery.NewScanner()
-				_, scanErr := scanner.Scan(wd)
-				if scanErr == nil {
-					projectID = profile.ProjectID(wd, "")
-				}
+				projectID = profile.ProjectID(wd, "")
 			}
 
 			if projectID == "" {
@@ -50,6 +45,10 @@ func newProfileShowCmd() *cobra.Command {
 			p, err := store.LoadProfile(projectID)
 			if err != nil {
 				return fmt.Errorf("profile show: profile not found for %s: %w", projectID, err)
+			}
+
+			if OutputJSON(cmd) {
+				return WriteOutput(cmd, "", p)
 			}
 
 			fmt.Fprintf(cmd.OutOrStdout(), "Project:    %s\n", p.Project.Name)
