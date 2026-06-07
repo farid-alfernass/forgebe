@@ -18,6 +18,7 @@ func newExportCmd() *cobra.Command {
 	}
 	cmd.AddCommand(newExportSummaryCmd())
 	cmd.AddCommand(newExportAdapterCmd())
+	cmd.AddCommand(newExportBundleCmd())
 	return cmd
 }
 
@@ -112,4 +113,45 @@ func sanitizeToolName(v string) string {
 		return "tool"
 	}
 	return out
+}
+
+func newExportBundleCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "bundle [project-id] [output-path]",
+		Short: "Export a portable .forgebe.zip bundle",
+		Args:  cobra.MaximumNArgs(2),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			paths, err := storage.NewPaths()
+			if err != nil {
+				return fmt.Errorf("export bundle: %w", err)
+			}
+
+			var projectID, outputPath string
+			switch len(args) {
+			case 2:
+				projectID = args[0]
+				outputPath = args[1]
+			case 1:
+				projectID = args[0]
+				outputPath = export.DefaultBundlePath(projectID, paths)
+			case 0:
+				entries, err := storage.ListProjectIDs(paths)
+				if err != nil {
+					return fmt.Errorf("export bundle: list projects: %w", err)
+				}
+				if len(entries) == 0 {
+					return fmt.Errorf("export bundle: no projects found")
+				}
+				projectID = entries[len(entries)-1]
+				outputPath = export.DefaultBundlePath(projectID, paths)
+			}
+
+			if err := export.ExportBundle(projectID, paths, outputPath); err != nil {
+				return fmt.Errorf("export bundle: %w", err)
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "Exported bundle: %s\n", outputPath)
+			return nil
+		},
+		SilenceUsage: true,
+	}
 }
