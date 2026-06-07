@@ -11,10 +11,10 @@ func TestStoreSaveAndLoadProfile(t *testing.T) {
 	paths := storage.NewPathsWithRoot(t.TempDir())
 	store := NewStore(paths)
 	profile := ProjectProfile{
-		Version: "1",
+		Version:  "1",
 		Metadata: Metadata{ProfileID: "demo_123", CreatedAt: time.Now(), UpdatedAt: time.Now()},
-		Project: Project{Name: "demo", Maturity: "existing", Type: "service", Languages: []string{"go"}},
-		Stack: Stack{PrimaryLanguage: "go", Architecture: "layered"},
+		Project:  Project{Name: "demo", Maturity: "existing", Type: "service", Languages: []string{"go"}},
+		Stack:    Stack{PrimaryLanguage: "go", Architecture: "layered"},
 	}
 	if err := store.SaveProfile(profile); err != nil {
 		t.Fatalf("save failed: %v", err)
