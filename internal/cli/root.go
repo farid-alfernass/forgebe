@@ -23,6 +23,7 @@ func NewRootCmd() *cobra.Command {
 	cmd.AddCommand(newDoctorCmd())
 	cmd.AddCommand(newProfileCmd())
 	cmd.AddCommand(newExportCmd())
+	cmd.AddCommand(newBriefCmd())
 	return cmd
 }
 
