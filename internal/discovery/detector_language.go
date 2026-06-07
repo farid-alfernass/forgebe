@@ -8,97 +8,109 @@ import (
 	"github.com/faridtriwicaksono/forgebe/internal/profile"
 )
 
-var languageManifestMap = map[string]string{
+// manifestLangMap maps filenames to languages.
+var manifestLangMap = map[string]string{
 	"go.mod":           "go",
 	"package.json":     "javascript",
-	"tsconfig.json":    "typescript",
-	"pyproject.toml":   "python",
-	"requirements.txt": "python",
 	"pom.xml":          "java",
-	"build.gradle":     "java",
+	"requirements.txt": "python",
+	"pyproject.toml":   "python",
 	"Cargo.toml":       "rust",
+	"Gemfile":          "ruby",
+	"composer.json":    "php",
 }
 
-var extensionLanguageMap = map[string]string{
-	".go":   "go",
-	".js":   "javascript",
-	".ts":   "typescript",
-	".tsx":  "typescript",
-	".py":   "python",
-	".java": "java",
-	".kt":   "kotlin",
-	".rs":   "rust",
+var extLangMap = map[string]string{
+	".go":    "go",
+	".js":    "javascript",
+	".ts":    "typescript",
+	".tsx":   "typescript",
+	".py":    "python",
+	".java":  "java",
+	".rs":    "rust",
+	".rb":    "ruby",
+	".php":   "php",
+	".cpp":   "cpp",
+	".cs":    "csharp",
+	".swift": "swift",
+	".kt":    "kotlin",
 }
 
+// DetectLanguages detects primary languages with root-priority.
 func DetectLanguages(root string, files []string) []profile.LanguageDetection {
-	manifestByLang := map[string]string{}
-	counts := map[string]int{}
-	exts := map[string]map[string]struct{}{}
+	type langInfo struct {
+		language   string
+		confidence float64 // 0.0-1.0 internal, mapped to string later
+		manifest   string
+	}
+	langs := make(map[string]*langInfo)
+	extCount := make(map[string]int)
 
-	for _, f := range files {
-		base := filepath.Base(f)
-		if lang, ok := languageManifestMap[base]; ok {
-			manifestByLang[lang] = f
-		}
-		ext := strings.ToLower(filepath.Ext(f))
-		if lang, ok := extensionLanguageMap[ext]; ok {
-			counts[lang]++
-			if exts[lang] == nil {
-				exts[lang] = map[string]struct{}{}
+	for _, file := range files {
+		base := filepath.Base(file)
+		rel, _ := filepath.Rel(root, file)
+		depth := strings.Count(rel, string(filepath.Separator))
+
+		if lang, ok := manifestLangMap[base]; ok {
+			if _, exists := langs[lang]; !exists {
+				langs[lang] = &langInfo{language: lang, manifest: base}
 			}
-			exts[lang][ext] = struct{}{}
+			// Root (depth 0) gets highest confidence
+			candidate := 1.0
+			if depth > 0 {
+				candidate = 0.7 - (float64(depth) * 0.15)
+				if candidate < 0.1 {
+					candidate = 0.1
+				}
+			}
+			if candidate > langs[lang].confidence {
+				langs[lang].confidence = candidate
+			}
+		}
+
+		ext := filepath.Ext(file)
+		if ext != "" {
+			extCount[ext]++
 		}
 	}
 
-	langSet := map[string]struct{}{}
-	for lang := range manifestByLang {
-		langSet[lang] = struct{}{}
-	}
-	for lang := range counts {
-		langSet[lang] = struct{}{}
+	// Count extensions to compute secondary evidence
+	for ext := range extCount {
+		if lang, ok := extLangMap[ext]; ok {
+			if _, exists := langs[lang]; !exists {
+				langs[lang] = &langInfo{language: lang, confidence: 0.3}
+			}
+		}
 	}
 
-	var results []profile.LanguageDetection
-	for lang := range langSet {
-		conf := "medium"
-		if manifestByLang[lang] != "" {
-			conf = "high"
-		} else if counts[lang] <= 1 {
-			conf = "low"
-		}
-		var extList []string
-		for ext := range exts[lang] {
-			extList = append(extList, ext)
-		}
-		sort.Strings(extList)
-		results = append(results, profile.LanguageDetection{
-			Language:   lang,
-			Confidence: conf,
-			Files:      counts[lang],
-			Extensions: extList,
-			Manifest:   manifestByLang[lang],
+	// Sort by confidence descending
+	sorted := make([]*langInfo, 0, len(langs))
+	for _, info := range langs {
+		sorted = append(sorted, info)
+	}
+	sort.Slice(sorted, func(i, j int) bool {
+		return sorted[i].confidence > sorted[j].confidence
+	})
+
+	var result []profile.LanguageDetection
+	for _, info := range sorted {
+		result = append(result, profile.LanguageDetection{
+			Language:   info.language,
+			Confidence: confidenceLabel(info.confidence),
+			Manifest:   info.manifest,
 		})
 	}
-
-	sort.Slice(results, func(i, j int) bool {
-		if results[i].Confidence == results[j].Confidence {
-			if results[i].Files == results[j].Files {
-				return results[i].Language < results[j].Language
-			}
-			return results[i].Files > results[j].Files
-		}
-		return confidenceRank(results[i].Confidence) > confidenceRank(results[j].Confidence)
-	})
-	return results
+	if len(result) == 0 {
+		return nil
+	}
+	return result
 }
 
-func confidenceRank(v string) int {
-	switch v {
-	case "high":
-		return 3
-	case "medium":
-		return 2
-	default:
-		return 1
+func confidenceLabel(score float64) string {
+	if score >= 0.9 {
+		return "high"
+	} else if score >= 0.5 {
+		return "medium"
 	}
+	return "low"
 }

@@ -11,8 +11,8 @@ import (
 	"github.com/faridtriwicaksono/forgebe/internal/storage"
 )
 
-// ExportBundle creates a portable .forgebe.zip bundle containing profile, contract, and metadata.
-func ExportBundle(projectID string, paths *storage.Paths, outputPath string) error {
+// ExportBundle creates a portable .forgebe.zip bundle.
+func ExportBundle(projectID string, paths *storage.Paths, outputPath string) (err error) {
 	projectDir := paths.ProjectDir(projectID)
 	info, err := os.Stat(projectDir)
 	if err != nil {
@@ -22,49 +22,56 @@ func ExportBundle(projectID string, paths *storage.Paths, outputPath string) err
 		return fmt.Errorf("export bundle: %s is not a directory", projectDir)
 	}
 
+	// Ensure parent directory exists
+	if err := os.MkdirAll(filepath.Dir(outputPath), 0700); err != nil {
+		return fmt.Errorf("export bundle: create output dir: %w", err)
+	}
+
 	outputFile, err := os.Create(outputPath)
 	if err != nil {
 		return fmt.Errorf("export bundle: create file: %w", err)
 	}
-	defer outputFile.Close()
+	defer func() {
+		if cerr := outputFile.Close(); cerr != nil && err == nil {
+			err = fmt.Errorf("export bundle: close file: %w", cerr)
+		}
+	}()
 
 	zw := zip.NewWriter(outputFile)
-	defer zw.Close()
+	defer func() {
+		if cerr := zw.Close(); cerr != nil && err == nil {
+			err = fmt.Errorf("export bundle: finalize zip: %w", cerr)
+		}
+	}()
 
-	err = filepath.WalkDir(projectDir, func(path string, d os.DirEntry, err error) error {
-		if err != nil {
-			return err
+	// Walk project dir and add files
+	walkErr := filepath.WalkDir(projectDir, func(path string, d os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
 		}
 		if path == projectDir {
 			return nil
 		}
-
 		rel, err := filepath.Rel(projectDir, path)
 		if err != nil {
 			return err
 		}
-
-		zipPath := filepath.Join(projectID, rel)
+		zipPath := filepath.Join(projectID, filepath.ToSlash(rel))
 
 		if d.IsDir() {
 			_, err := zw.Create(zipPath + "/")
 			return err
 		}
-
-		if err := addFileToZip(zw, path, zipPath); err != nil {
-			return fmt.Errorf("add %s to zip: %w", rel, err)
-		}
-		return nil
+		return addFileToZip(zw, path, zipPath)
 	})
-
-	if err != nil {
-		return fmt.Errorf("export bundle: walk project dir: %w", err)
+	if walkErr != nil {
+		return fmt.Errorf("export bundle: walk: %w", walkErr)
 	}
 
 	return nil
 }
 
-// ImportBundle extracts a .forgebe.zip bundle into targetDir.
+// ImportBundle extracts a .forgebe.zip bundle into targetDir using symlink-safe paths.
 func ImportBundle(bundlePath, targetDir string) error {
 	reader, err := zip.OpenReader(bundlePath)
 	if err != nil {
@@ -72,43 +79,69 @@ func ImportBundle(bundlePath, targetDir string) error {
 	}
 	defer reader.Close()
 
-	for _, f := range reader.File {
-		fpath := filepath.Join(targetDir, f.Name)
+	// Resolve target to real path to prevent symlink escape
+	absTarget, err := filepath.Abs(targetDir)
+	if err != nil {
+		return fmt.Errorf("import bundle: resolve target: %w", err)
+	}
+	cleanTarget := filepath.Clean(absTarget)
 
-		// ZipSlip protection
-		cleanTarget := filepath.Clean(targetDir) + string(os.PathSeparator)
-		if !strings.HasPrefix(filepath.Clean(fpath), cleanTarget) {
+	// Ensure target directory exists
+	if err := os.MkdirAll(cleanTarget, 0700); err != nil {
+		return fmt.Errorf("import bundle: create target: %w", err)
+	}
+
+	// Resolve real path after creation to handle intermediary symlinks
+	realTarget, err := filepath.EvalSymlinks(cleanTarget)
+	if err != nil {
+		return fmt.Errorf("import bundle: eval symlinks target: %w", err)
+	}
+
+	for _, f := range reader.File {
+		fpath := filepath.Join(realTarget, f.Name)
+
+		if !strings.HasPrefix(filepath.Clean(fpath), realTarget+string(os.PathSeparator)) {
 			return fmt.Errorf("import bundle: illegal file path %s", f.Name)
 		}
 
 		if f.FileInfo().IsDir() {
-			os.MkdirAll(fpath, 0700)
+			if err := os.MkdirAll(fpath, 0700); err != nil {
+				return fmt.Errorf("import bundle: mkdir: %w", err)
+			}
 			continue
 		}
 
 		if err := os.MkdirAll(filepath.Dir(fpath), 0700); err != nil {
-			return fmt.Errorf("import bundle: mkdir: %w", err)
+			return fmt.Errorf("import bundle: mkdir parent: %w", err)
+		}
+
+		// Check if writing through a symlink (symlink traversal)
+		parentDir, err := filepath.EvalSymlinks(filepath.Dir(fpath))
+		if err != nil {
+			return fmt.Errorf("import bundle: eval symlinks: %w", err)
+		}
+		if !strings.HasPrefix(parentDir, realTarget) {
+			return fmt.Errorf("import bundle: symlink traversal blocked for %s", f.Name)
 		}
 
 		outFile, err := os.OpenFile(fpath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, f.Mode())
 		if err != nil {
-			return fmt.Errorf("import bundle: create file: %w", err)
+			return fmt.Errorf("import bundle: create %s: %w", f.Name, err)
 		}
 
 		rc, err := f.Open()
 		if err != nil {
 			outFile.Close()
-			return fmt.Errorf("import bundle: open zip entry: %w", err)
+			return fmt.Errorf("import bundle: open zip entry %s: %w", f.Name, err)
 		}
 
 		_, err = io.Copy(outFile, rc)
 		outFile.Close()
 		rc.Close()
 		if err != nil {
-			return fmt.Errorf("import bundle: write file: %w", err)
+			return fmt.Errorf("import bundle: write %s: %w", f.Name, err)
 		}
 	}
-
 	return nil
 }
 
@@ -118,14 +151,16 @@ func DefaultBundlePath(projectID string, paths *storage.Paths) string {
 }
 
 func addFileToZip(zw *zip.Writer, srcPath, zipPath string) error {
-	data, err := os.ReadFile(srcPath)
+	f, err := os.Open(srcPath)
 	if err != nil {
 		return err
 	}
+	defer f.Close()
+
 	w, err := zw.Create(filepath.ToSlash(zipPath))
 	if err != nil {
 		return err
 	}
-	_, err = w.Write(data)
+	_, err = io.Copy(w, f)
 	return err
 }

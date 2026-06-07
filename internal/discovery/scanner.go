@@ -133,6 +133,7 @@ func shouldSkipPath(rel string, isDir bool) bool {
 		".git": true, "node_modules": true, "vendor": true, "dist": true,
 		"build": true, "target": true, ".next": true, ".nuxt": true,
 		".venv": true, "venv": true, "__pycache__": true, ".idea": true, ".vscode": true,
+		"testdata": true, "fixtures": true, "examples": true,
 	}
 	for _, part := range parts {
 		if skipDirs[part] {
