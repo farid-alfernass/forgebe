@@ -136,8 +136,13 @@ func ImportBundle(bundlePath, targetDir string) error {
 		}
 
 		_, err = io.Copy(outFile, rc)
-		outFile.Close()
-		rc.Close()
+
+		if cerr := outFile.Close(); cerr != nil && err == nil {
+			err = fmt.Errorf("import bundle: close output file %s: %w", f.Name, cerr)
+		}
+		if cerr := rc.Close(); cerr != nil && err == nil {
+			err = fmt.Errorf("import bundle: close zip entry %s: %w", f.Name, cerr)
+		}
 		if err != nil {
 			return fmt.Errorf("import bundle: write %s: %w", f.Name, err)
 		}
