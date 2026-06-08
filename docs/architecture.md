@@ -7,19 +7,24 @@ ForgeBE is a Go CLI tool that helps backend engineers maintain consistent AI-ass
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                         CLI Layer                               │
-│  init │ scan │ doctor │ profile │ brief │ export │ import      │
+│  init │ scan │ doctor │ profile │ brief │ export │ import │ sync │ watch │
+│  scaffold │ adopt │ verify │ check │ prompt                                  │
 └───────────────────────────┬─────────────────────────────────────┘
                             │
 ┌───────────────────────────▼─────────────────────────────────────┐
 │                      Core Domain                                │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────────┐  │
-│  │  Discovery  │  │   Profile   │  │       Adapters          │  │
-│  │  (scanner)  │  │   (model)   │  │  (claude/cursor/...)    │  │
-│  └─────────────┘  └─────────────┘  └─────────────────────────┘  │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────────┐  │
-│  │  Contract   │  │   Export    │  │      Onboarding         │  │
-│  │ (extractor) │  │(summary/zip)│  │   (guided questions)    │  │
-│  └─────────────┘  └─────────────┘  └─────────────────────────┘  │
+│  ┌──────────────┐  ┌─────────────┐  ┌──────────────────────┐  │
+│  │  Discovery   │  │   Profile   │  │       Adapters       │  │
+│  │  (scanner)   │  │   (model)   │  │  (claude/cursor/...) │  │
+│  └──────────────┘  └─────────────┘  └──────────────────────┘  │
+│  ┌──────────────┐  ┌─────────────┐  ┌──────────────────────┐  │
+│  │  Contract    │  │   Export    │  │      Onboarding      │  │
+│  │ (extractor)  │  │(summary/zip)│  │   (guided questions) │  │
+│  └──────────────┘  └─────────────┘  └──────────────────────┘  │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  ┌──────────┐  │
+│  │  Scaffold    │  │   Verify     │  │    Check     │  │  Prompt  │  │
+│  │ (generator)  │  │ (policies)   │  │  (health)    │  │  (gen)   │  │
+│  └──────────────┘  └──────────────┘  └──────────────┘  └──────────┘  │
 └───────────────────────────┬─────────────────────────────────────┘
                             │
 ┌───────────────────────────▼─────────────────────────────────────┐
@@ -50,6 +55,13 @@ forgebe/
 │   │   ├── brief.go
 │   │   ├── export.go
 │   │   ├── import.go
+│   │   ├── sync.go
+│   │   ├── watch.go
+│   │   ├── scaffold.go       # Project scaffolding
+│   │   ├── adopt.go          # Adopt existing project
+│   │   ├── verify.go         # Policy verification
+│   │   ├── check.go          # Health check / quality gate
+│   │   ├── prompt.go         # AI prompt generator
 │   │   └── output.go         # JSON/file output helpers
 │   ├── discovery/            # Codebase scanning
 │   │   ├── scanner.go
