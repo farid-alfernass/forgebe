@@ -14,9 +14,6 @@ func DetectDependencies(root string, files []string) profile.DependencyDetection
 		case "go.mod":
 			result.PackageManager = "go modules"
 			result.ManifestFile = f
-		case "package.json":
-			result.PackageManager = "npm"
-			result.ManifestFile = f
 		case "pnpm-lock.yaml":
 			result.LockFile = f
 			if result.PackageManager == "" {
@@ -27,6 +24,11 @@ func DetectDependencies(root string, files []string) profile.DependencyDetection
 			if result.PackageManager == "" {
 				result.PackageManager = "yarn"
 			}
+		case "package.json":
+			if result.PackageManager == "" {
+				result.PackageManager = "npm"
+			}
+			result.ManifestFile = f
 		case "requirements.txt", "pyproject.toml":
 			if result.ManifestFile == "" {
 				result.ManifestFile = f

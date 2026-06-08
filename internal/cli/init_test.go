@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"archive/zip"
 	"bytes"
 	"os"
 	"strings"
@@ -94,5 +95,51 @@ func TestImportCmd_InvalidZip(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "import") {
 		t.Errorf("expected import error, got: %q", err.Error())
+	}
+}
+
+func TestImportCmd_Success(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	// Create a valid zip bundle
+	bundlePath := tmpDir + "/test.forgebe.zip"
+	zf, err := os.Create(bundlePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	zw := zip.NewWriter(zf)
+	fw, err := zw.Create("testproj/profile.yaml")
+	if err != nil {
+		t.Fatal(err)
+	}
+	fw.Write([]byte("version: '1.0'"))
+	zw.Close()
+	zf.Close()
+
+	targetDir := tmpDir + "/imported"
+
+	var out bytes.Buffer
+	cmd := NewRootCmd()
+	cmd.SetOut(&out)
+	cmd.SetErr(&out)
+	cmd.SilenceUsage = true
+	cmd.SilenceErrors = true
+	cmd.SetArgs([]string{"import", bundlePath, targetDir})
+
+	err = cmd.Execute()
+	if err != nil {
+		t.Fatalf("unexpected error: %v; output:\n%s", err, out.String())
+	}
+
+	if !strings.Contains(out.String(), "Imported bundle:") {
+		t.Errorf("expected 'Imported bundle:' in output, got:\n%s", out.String())
+	}
+	if !strings.Contains(out.String(), "Destination:") {
+		t.Errorf("expected 'Destination:' in output, got:\n%s", out.String())
+	}
+
+	// Verify file was extracted
+	if _, err := os.Stat(targetDir + "/testproj/profile.yaml"); os.IsNotExist(err) {
+		t.Fatal("expected extracted file to exist")
 	}
 }
