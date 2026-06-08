@@ -124,10 +124,10 @@ func TestGenerate_ForceOverwrite(t *testing.T) {
 	p.Stack.PrimaryLanguage = "go"
 
 	tmpDir := t.TempDir()
-	
+
 	// Pre-create a file
 	goModPath := tmpDir + "/go.mod"
-	
+
 	// Write initial content using os package
 	if err := os.WriteFile(goModPath, []byte("initial content"), 0644); err != nil {
 		t.Fatal(err)

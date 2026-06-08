@@ -131,6 +131,59 @@ func TestValidator_JSONOutput(t *testing.T) {
 	}
 }
 
+func TestResultsToText(t *testing.T) {
+	p := profile.NewSampleProfile()
+	v, _ := NewValidator(&p)
+
+	results := v.Validate()
+	text := ResultsToText(results)
+
+	if len(text) == 0 {
+		t.Fatal("expected non-empty text output")
+	}
+	if !contains(text, "ForgeBE Verify Report") {
+		t.Error("expected header in text output")
+	}
+	if !contains(text, "Summary:") {
+		t.Error("expected summary in text output")
+	}
+}
+
+func TestResultsToText_WithFailure(t *testing.T) {
+	results := []Result{
+		{Check: "test_check", Status: "FAIL", Message: "Something failed"},
+	}
+	text := ResultsToText(results)
+	if !contains(text, "FAIL") {
+		t.Error("expected FAIL in text output")
+	}
+	if !contains(text, "Result: FAIL") {
+		t.Error("expected Result: FAIL at end")
+	}
+}
+
+func TestResultsToText_WithWarn(t *testing.T) {
+	results := []Result{
+		{Check: "test_check", Status: "WARN", Message: "Warning"},
+	}
+	text := ResultsToText(results)
+	if !contains(text, "WARN") {
+		t.Error("expected WARN in text output")
+	}
+	if !contains(text, "Result: WARN") {
+		t.Error("expected Result: WARN at end")
+	}
+}
+
+func contains(s, substr string) bool {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
+}
+
 func TestValidate_EmptySensitiveAreas(t *testing.T) {
 	p := profile.NewSampleProfile()
 	p.Areas.SensitiveAreas = nil
