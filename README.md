@@ -280,6 +280,7 @@ Untuk detail arsitektur lengkap, lihat [Architecture](docs/architecture.md).
 | [Real-World Examples](docs/real-world-examples.md) | Contoh penggunaan di project nyata: Go, Node.js, legacy, multi-team, CI/CD |
 | [Architecture](docs/architecture.md) | System design, data flow, extension points |
 | [CLI Reference](docs/cli-reference.md) | Complete command reference with examples |
+| [Release Guide](docs/release-guide.md) | GitHub release process, versioning, binary distribution |
 | [Security](docs/security.md) | Threat model, security boundaries |
 | [Contributing](CONTRIBUTING.md) | Panduan kontribusi, testing, PR, release process |
 
