@@ -370,22 +370,36 @@ and whether any files are outdated or missing.`,
 				fmt.Fprintln(cmd.OutOrStdout(), "Last sync: never")
 			}
 
+			fmt.Fprintf(cmd.OutOrStdout(), "\nSummary: %d total, %d up-to-date, %d changed, %d missing\n",
+				status.Summary.Total, status.Summary.UpToDate, status.Summary.Changed, status.Summary.Missing)
+
 			if len(status.SyncedFiles) > 0 {
-				fmt.Fprintln(cmd.OutOrStdout(), "\nSynced files:")
+				fmt.Fprintln(cmd.OutOrStdout(), "\nManaged files present:")
 				for _, f := range status.SyncedFiles {
 					fmt.Fprintf(cmd.OutOrStdout(), "  - %s (%s)\n", f.Filename, f.Tool)
 				}
 			} else {
-				fmt.Fprintln(cmd.OutOrStdout(), "\nNo synced files found.")
+				fmt.Fprintln(cmd.OutOrStdout(), "\nNo managed files found in the repository.")
 			}
 
-			if len(status.Outdated) > 0 {
-				fmt.Fprintln(cmd.OutOrStdout(), "\nOutdated or missing files:")
-				for _, f := range status.Outdated {
-					fmt.Fprintf(cmd.OutOrStdout(), "  - %s\n", f)
+			if len(status.ChangedFiles) > 0 {
+				fmt.Fprintln(cmd.OutOrStdout(), "\nChanged files:")
+				for _, f := range status.ChangedFiles {
+					fmt.Fprintf(cmd.OutOrStdout(), "  - %s (%s): %s\n", f.Filename, f.Tool, f.Reason)
 				}
-			} else {
+			}
+
+			if len(status.MissingFiles) > 0 {
+				fmt.Fprintln(cmd.OutOrStdout(), "\nMissing files:")
+				for _, f := range status.MissingFiles {
+					fmt.Fprintf(cmd.OutOrStdout(), "  - %s (%s)\n", f.Filename, f.Tool)
+				}
+			}
+
+			if status.Summary.Changed == 0 && status.Summary.Missing == 0 {
 				fmt.Fprintln(cmd.OutOrStdout(), "\nAll context files are up-to-date.")
+			} else {
+				fmt.Fprintln(cmd.OutOrStdout(), "\nRun `forgebe sync` to reconcile changed or missing context files.")
 			}
 			return nil
 		},

@@ -189,7 +189,7 @@ func TestManager_SyncAndStatus(t *testing.T) {
 		}
 	})
 
-	t.Run("Status detects stale file", func(t *testing.T) {
+	t.Run("Status detects changed file", func(t *testing.T) {
 		claudePath := filepath.Join(tmpRepo, "CLAUDE.md")
 		if err := os.WriteFile(claudePath, []byte("stale content"), 0644); err != nil {
 			t.Fatal(err)
@@ -202,13 +202,13 @@ func TestManager_SyncAndStatus(t *testing.T) {
 
 		found := false
 		for _, o := range status.Outdated {
-			if o == "CLAUDE.md (stale)" {
+			if o == "CLAUDE.md (changed)" {
 				found = true
 				break
 			}
 		}
 		if !found {
-			t.Errorf("expected CLAUDE.md (stale), got outdated: %v", status.Outdated)
+			t.Errorf("expected CLAUDE.md (changed), got outdated: %v", status.Outdated)
 		}
 	})
 
@@ -362,6 +362,67 @@ func TestShouldWatchDir(t *testing.T) {
 				t.Fatalf("ShouldWatchDir(%q) = %v, want %v", tc.dir, got, tc.expected)
 			}
 		})
+	}
+}
+
+func TestManager_StatusSummaryClassifiesChangedAndMissing(t *testing.T) {
+	tmpRoot, err := os.MkdirTemp("", "forgebe-status-summary-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tmpRoot)
+
+	paths := storage.NewPathsWithRoot(tmpRoot)
+	if err := paths.EnsureDirectories(); err != nil {
+		t.Fatal(err)
+	}
+
+	tmpRepo, err := os.MkdirTemp("", "status-summary-repo-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tmpRepo)
+
+	projectID := "status-summary"
+	p := profile.NewSampleProfile()
+	p.Metadata.ProfileID = projectID
+	p.Metadata.RepoPath = tmpRepo
+
+	store := profile.NewStore(paths)
+	if err := store.SaveProfile(p); err != nil {
+		t.Fatal(err)
+	}
+
+	mgr := &Manager{ProjectID: projectID, Profile: &p, Paths: paths, Store: store, Tools: []string{"claude", "hermes"}}
+	if _, err := mgr.Sync(false, false); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := os.WriteFile(filepath.Join(tmpRepo, "CLAUDE.md"), []byte("manual local change"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(filepath.Join(tmpRepo, "AGENTS.md")); err != nil {
+		t.Fatal(err)
+	}
+
+	status, err := mgr.Status()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status.Summary.Total != 2 {
+		t.Fatalf("expected total 2, got %d", status.Summary.Total)
+	}
+	if status.Summary.Changed != 1 {
+		t.Fatalf("expected changed 1, got %d", status.Summary.Changed)
+	}
+	if status.Summary.Missing != 1 {
+		t.Fatalf("expected missing 1, got %d", status.Summary.Missing)
+	}
+	if len(status.ChangedFiles) != 1 || status.ChangedFiles[0].Filename != "CLAUDE.md" {
+		t.Fatalf("expected CLAUDE.md changed, got %#v", status.ChangedFiles)
+	}
+	if len(status.MissingFiles) != 1 || status.MissingFiles[0].Filename != "AGENTS.md" {
+		t.Fatalf("expected AGENTS.md missing, got %#v", status.MissingFiles)
 	}
 }
 

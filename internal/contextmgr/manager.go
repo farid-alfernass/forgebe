@@ -33,12 +33,33 @@ type Report struct {
 
 // StatusReport represents the current state of managed context files.
 type StatusReport struct {
-	ProjectID   string       `json:"project_id"`
-	RepoPath    string       `json:"repo_path"`
-	ProfileAge  string       `json:"profile_age"`
-	LastSync    string       `json:"last_sync"`
-	SyncedFiles []SyncedFile `json:"synced_files"`
-	Outdated    []string     `json:"outdated"`
+	ProjectID    string        `json:"project_id"`
+	RepoPath     string        `json:"repo_path"`
+	ProfileAge   string        `json:"profile_age"`
+	LastSync     string        `json:"last_sync"`
+	SyncedFiles  []SyncedFile  `json:"synced_files"`
+	Summary      StatusSummary `json:"summary"`
+	MissingFiles []FileStatus  `json:"missing_files"`
+	ChangedFiles []FileStatus  `json:"changed_files"`
+	Outdated     []string      `json:"outdated"`
+}
+
+// StatusSummary gives compact counts for status UX and JSON consumers.
+type StatusSummary struct {
+	Total    int `json:"total"`
+	Synced   int `json:"synced"`
+	Missing  int `json:"missing"`
+	Changed  int `json:"changed"`
+	UpToDate int `json:"up_to_date"`
+}
+
+// FileStatus describes a managed file that needs attention.
+type FileStatus struct {
+	Tool         string `json:"tool"`
+	Filename     string `json:"filename"`
+	Reason       string `json:"reason"`
+	ExpectedHash string `json:"expected_hash,omitempty"`
+	ActualHash   string `json:"actual_hash,omitempty"`
 }
 
 // DefaultTools is the list of tools to manage by default.
@@ -191,46 +212,77 @@ func (m *Manager) Status() (*StatusReport, error) {
 	}
 
 	var syncedFiles []SyncedFile
+	var missingFiles []FileStatus
+	var changedFiles []FileStatus
 	var outdated []string
+	summary := StatusSummary{}
 
 	for _, tool := range m.Tools {
-		_, filename, err := adapters.Render(tool, *m.Profile)
+		content, filename, err := adapters.Render(tool, *m.Profile)
 		if err != nil {
 			continue
 		}
+		summary.Total++
 
+		expectedHash := fmt.Sprintf("%x", sha256.Sum256([]byte(content)))
 		destPath := filepath.Join(repoPath, filename)
 		if _, err := os.Stat(destPath); os.IsNotExist(err) {
+			summary.Missing++
+			missingFiles = append(missingFiles, FileStatus{
+				Tool:         tool,
+				Filename:     filename,
+				Reason:       "missing",
+				ExpectedHash: expectedHash,
+			})
 			outdated = append(outdated, filename+" (missing)")
 			continue
 		}
 
-		// Check if content matches current profile
-		content, _, err := adapters.Render(tool, *m.Profile)
-		if err == nil {
-			expectedHash := fmt.Sprintf("%x", sha256.Sum256([]byte(content)))
-			existing, err := os.ReadFile(destPath)
-			if err == nil {
-				existingHash := fmt.Sprintf("%x", sha256.Sum256(existing))
-				syncedFiles = append(syncedFiles, SyncedFile{
-					Tool:     tool,
-					Filename: filename,
-					Hash:     existingHash,
-				})
-				if existingHash != expectedHash {
-					outdated = append(outdated, filename+" (stale)")
-				}
-			}
+		existing, err := os.ReadFile(destPath)
+		if err != nil {
+			summary.Changed++
+			changedFiles = append(changedFiles, FileStatus{
+				Tool:         tool,
+				Filename:     filename,
+				Reason:       "unreadable",
+				ExpectedHash: expectedHash,
+			})
+			outdated = append(outdated, filename+" (unreadable)")
+			continue
 		}
+
+		existingHash := fmt.Sprintf("%x", sha256.Sum256(existing))
+		syncedFiles = append(syncedFiles, SyncedFile{
+			Tool:     tool,
+			Filename: filename,
+			Hash:     existingHash,
+		})
+		if existingHash != expectedHash {
+			summary.Changed++
+			changedFiles = append(changedFiles, FileStatus{
+				Tool:         tool,
+				Filename:     filename,
+				Reason:       "changed",
+				ExpectedHash: expectedHash,
+				ActualHash:   existingHash,
+			})
+			outdated = append(outdated, filename+" (changed)")
+			continue
+		}
+		summary.UpToDate++
 	}
+	summary.Synced = len(syncedFiles)
 
 	return &StatusReport{
-		ProjectID:   m.ProjectID,
-		RepoPath:    repoPath,
-		ProfileAge:  profileAge,
-		LastSync:    lastSync,
-		SyncedFiles: syncedFiles,
-		Outdated:    outdated,
+		ProjectID:    m.ProjectID,
+		RepoPath:     repoPath,
+		ProfileAge:   profileAge,
+		LastSync:     lastSync,
+		SyncedFiles:  syncedFiles,
+		Summary:      summary,
+		MissingFiles: missingFiles,
+		ChangedFiles: changedFiles,
+		Outdated:     outdated,
 	}, nil
 }
 
