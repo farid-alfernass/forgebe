@@ -300,7 +300,52 @@ func TestPromptCmd_NonExistentProject(t *testing.T) {
 	}
 }
 
-// === ADOPT DRY-RUN with Go project ===
+// === VERIFY ===
+
+// === VERIFY ===
+
+func TestVerifyCmd_Execution(t *testing.T) {
+	out, err := newRootCmdWithProject(t, []string{"verify", "testproj"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v; output:\n%s", err, out.String())
+	}
+	if !strings.Contains(out.String(), "ForgeBE Verify Report") {
+		t.Errorf("expected 'ForgeBE Verify Report' in output, got:\n%s", out.String())
+	}
+}
+
+func TestVerifyCmd_JSON(t *testing.T) {
+	out, err := newRootCmdWithProject(t, []string{"verify", "testproj", "--json"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v; output:\n%s", err, out.String())
+	}
+	if !strings.HasPrefix(strings.TrimSpace(out.String()), "[") {
+		t.Errorf("expected JSON array output, got:\n%s", out.String())
+	}
+}
+
+// === CHECK ===
+
+func TestCheckCmd_Execution(t *testing.T) {
+	out, err := newRootCmdWithProject(t, []string{"check", "testproj"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v; output:\n%s", err, out.String())
+	}
+	if !strings.Contains(out.String(), "ForgeBE Check") {
+		t.Errorf("expected 'ForgeBE Check' in output, got:\n%s", out.String())
+	}
+}
+
+func TestCheckCmd_JSON(t *testing.T) {
+	out, err := newRootCmdWithProject(t, []string{"check", "testproj", "--json"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v; output:\n%s", err, out.String())
+	}
+	if !strings.Contains(out.String(), "\"status\"") {
+		t.Errorf("expected JSON with 'status' key, got:\n%s", out.String())
+	}
+}
+
 func TestAdoptCmd_DryRunWithProject(t *testing.T) {
 	homeDir := t.TempDir()
 	t.Setenv("FORGEBE_HOME", homeDir)
