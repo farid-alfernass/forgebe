@@ -35,11 +35,27 @@ sudo make install
 # Initialize a project (guided onboarding)
 forgebe init
 
+# Adopt existing project
+forgebe adopt
+
 # Scan existing project
 forgebe scan .
 
+# Generate boilerplate for new project
+forgebe scaffold --template go-api --output ./new-backend
+
+# Verify project against engineering policies
+forgebe verify
+
+# Health check for CI/pre-commit
+forgebe check
+
 # Brief your AI tool
 forgebe brief claude
+
+# Generate context-aware prompts for AI tasks
+forgebe prompt implement "Add user authentication"
+forgebe prompt review "Check the payment handler"
 
 # Export adapter files
 forgebe export adapter cursor
@@ -52,11 +68,11 @@ forgebe sync
 forgebe watch
 ```
 
-See [docs/cli-reference.md](docs/cli-reference.md) for the full reference.
+See [docs/cli-reference.md](docs/cli-reference.md) for the full reference, or [docs/phase10-feature-expansion.md](docs/phase10-feature-expansion.md) for Phase 10 feature guide with detailed examples.
 
 ## Project Status
 
-**v1.0.0** — Production-ready. See [CHANGELOG.md](CHANGELOG.md) for release history.
+**v1.2.0** — Phase 10 Complete (Feature Expansion). Production-ready with 5 new operational commands. See [CHANGELOG.md](CHANGELOG.md) for release history.
 
 ## Docs
 
@@ -65,6 +81,7 @@ See [docs/cli-reference.md](docs/cli-reference.md) for the full reference.
 | [Architecture](docs/architecture.md) | System design, data flow, extension points |
 | [Security](docs/security.md) | Threat model, security boundaries, usage guidelines |
 | [CLI Reference](docs/cli-reference.md) | Complete command reference and examples |
+| [Phase 10 Guide](docs/phase10-feature-expansion.md) | Feature expansion: scaffold, adopt, verify, check, prompt |
 | [Contributing](CONTRIBUTING.md) | Development guidelines, quality gates |
 
 ## License
