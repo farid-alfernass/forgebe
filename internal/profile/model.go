@@ -11,6 +11,7 @@ type ProjectProfile struct {
 	Policy   Policy   `yaml:"policy" json:"policy"`
 	Areas    Areas    `yaml:"areas" json:"areas"`
 	AI       AI       `yaml:"ai" json:"ai"`
+	Watch    Watch    `yaml:"watch" json:"watch"`
 }
 
 type Metadata struct {
@@ -96,6 +97,15 @@ type AI struct {
 	InteractionMode string   `yaml:"interaction_mode" json:"interaction_mode"` // guided, auto, hybrid
 	ModelStrategy   string   `yaml:"model_strategy" json:"model_strategy"`     // single, multi, round-robin
 	PreferredModels []string `yaml:"preferred_models,omitempty" json:"preferred_models,omitempty"`
+}
+
+// Watch configures the filesystem watcher behaviour for auto-sync.
+type Watch struct {
+	Recursive        bool          `yaml:"recursive" json:"recursive"`
+	DebounceDuration time.Duration `yaml:"debounce_duration" json:"debounce_duration"`
+	IgnorePatterns   []string      `yaml:"ignore_patterns" json:"ignore_patterns"`
+	MatchPatterns    []string      `yaml:"match_patterns" json:"match_patterns"`
+	FullResyncEvery  time.Duration `yaml:"full_resync_every" json:"full_resync_every"`
 }
 
 // DiscoveryReport represents the output of automatic codebase scanning

@@ -292,6 +292,99 @@ func TestManager_SyncAndStatus(t *testing.T) {
 	})
 }
 
+func TestIsRelevantEventWithPatterns(t *testing.T) {
+	tests := []struct {
+		name     string
+		path     string
+		ignore   []string
+		match    []string
+		expected bool
+	}{
+		{
+			name:     "manifest remains relevant",
+			path:     "go.mod",
+			expected: true,
+		},
+		{
+			name:     "ignored directory skipped",
+			path:     "tmp/generated/file.go",
+			ignore:   []string{"generated"},
+			expected: false,
+		},
+		{
+			name:     "custom match pattern accepted",
+			path:     "docs/openapi.yaml",
+			match:    []string{"openapi.yaml"},
+			expected: true,
+		},
+		{
+			name:     "non-matching file rejected when match patterns configured",
+			path:     "README.md",
+			match:    []string{"openapi.yaml"},
+			expected: false,
+		},
+		{
+			name:     "source directory accepted with match patterns",
+			path:     "internal/service/user.go",
+			match:    []string{"openapi.yaml"},
+			expected: true,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := IsRelevantEventWithPatterns(tc.path, tc.ignore, tc.match)
+			if got != tc.expected {
+				t.Fatalf("IsRelevantEventWithPatterns(%q) = %v, want %v", tc.path, got, tc.expected)
+			}
+		})
+	}
+}
+
+func TestShouldWatchDir(t *testing.T) {
+	tests := []struct {
+		name     string
+		dir      string
+		ignore   []string
+		expected bool
+	}{
+		{name: "normal dir", dir: "internal", expected: true},
+		{name: "git always ignored", dir: ".git", expected: false},
+		{name: "hidden dir ignored", dir: ".cache", expected: false},
+		{name: "configured ignore exact", dir: "node_modules", ignore: []string{"node_modules"}, expected: false},
+		{name: "configured ignore contains", dir: "generated-code", ignore: []string{"generated"}, expected: false},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			got := ShouldWatchDir(tc.dir, tc.ignore)
+			if got != tc.expected {
+				t.Fatalf("ShouldWatchDir(%q) = %v, want %v", tc.dir, got, tc.expected)
+			}
+		})
+	}
+}
+
+func TestManager_GetWatchConfigDefaults(t *testing.T) {
+	p := profile.NewSampleProfile()
+	p.Watch = profile.Watch{}
+	mgr := &Manager{Profile: &p}
+
+	cfg := mgr.GetWatchConfig()
+	if !cfg.Recursive {
+		t.Fatal("expected recursive default to be true for zero watch config")
+	}
+	if cfg.DebounceDuration == 0 {
+		t.Fatal("expected default debounce duration")
+	}
+	if cfg.FullResyncEvery == 0 {
+		t.Fatal("expected default full resync interval")
+	}
+	if len(cfg.IgnorePatterns) == 0 {
+		t.Fatal("expected default ignore patterns")
+	}
+}
+
 func TestManager_SyncEmptyRepoPath(t *testing.T) {
 	tmpRoot, err := os.MkdirTemp("", "forgebe-nopath-*")
 	if err != nil {

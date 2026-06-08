@@ -45,5 +45,12 @@ func NewSampleProfile() ProjectProfile {
 			InteractionMode: "hybrid",
 			ModelStrategy:   "multi",
 		},
+		Watch: Watch{
+			Recursive:        true,
+			DebounceDuration: 2 * time.Second,
+			IgnorePatterns:   []string{"node_modules", "vendor", ".git", "dist", "build", "out"},
+			MatchPatterns:    []string{},
+			FullResyncEvery:  30 * time.Second,
+		},
 	}
 }

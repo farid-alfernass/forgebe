@@ -355,3 +355,109 @@ func IsRelevantEvent(path string) bool {
 
 	return false
 }
+
+// IsRelevantEventWithPatterns checks if a path is relevant, using configurable
+// ignore and match patterns. If matchPatterns is non-empty, only files whose
+// base name (or directory component) matches one of the patterns are considered
+// relevant. If ignorePatterns is non-empty, directories whose base name matches
+// any pattern cause the path to be skipped.
+func IsRelevantEventWithPatterns(path string, ignorePatterns, matchPatterns []string) bool {
+	cleanPath := filepath.Clean(path)
+	base := filepath.Base(cleanPath)
+
+	// First check the hardcoded manifest/config files (always relevant)
+	manifestCheck := map[string]bool{
+		"go.mod": true, "go.sum": true, "package.json": true, "Cargo.toml": true,
+		"pyproject.toml": true, "Dockerfile": true, ".gitignore": true, ".env": true,
+		"Makefile": true, "makefile": true,
+	}
+	if manifestCheck[base] {
+		return true
+	}
+
+	// Check ignore patterns on path components
+	if len(ignorePatterns) > 0 {
+		parts := strings.Split(cleanPath, string(os.PathSeparator))
+		for _, part := range parts {
+			for _, ign := range ignorePatterns {
+				if strings.EqualFold(part, ign) || strings.Contains(part, ign) {
+					return false
+				}
+			}
+		}
+	}
+
+	// If match patterns are specified, the file must match at least one
+	if len(matchPatterns) > 0 {
+		for _, pat := range matchPatterns {
+			if strings.EqualFold(base, pat) || strings.Contains(cleanPath, pat) {
+				return true
+			}
+		}
+		// Also allow source directory patterns
+		sourceDirs := map[string]bool{
+			"src": true, "lib": true, "app": true, "cmd": true,
+			"internal": true, "pkg": true, "api": true, "services": true,
+		}
+		parts := strings.Split(cleanPath, string(os.PathSeparator))
+		for _, part := range parts {
+			if sourceDirs[part] {
+				return true
+			}
+		}
+		return false
+	}
+
+	// No match patterns: fall through to standard IsRelevantEvent logic
+	return IsRelevantEvent(path)
+}
+
+// ShouldWatchDir checks if a directory name should be watched, based on
+// the configured ignore patterns.
+func ShouldWatchDir(dirName string, ignorePatterns []string) bool {
+	// Always ignore .git
+	if dirName == ".git" {
+		return false
+	}
+
+	// Skip hidden directories
+	if strings.HasPrefix(dirName, ".") && dirName != "." {
+		return false
+	}
+
+	for _, ign := range ignorePatterns {
+		if strings.EqualFold(dirName, ign) || strings.Contains(dirName, ign) {
+			return false
+		}
+	}
+	return true
+}
+
+// GetWatchConfig returns the watch configuration from the profile.
+// If no config is set, it returns sensible defaults.
+func (m *Manager) GetWatchConfig() profile.Watch {
+	cfg := m.Profile.Watch
+	if cfg.DebounceDuration <= 0 {
+		cfg.DebounceDuration = 2 * time.Second
+	}
+	if cfg.FullResyncEvery <= 0 {
+		cfg.FullResyncEvery = 30 * time.Second
+	}
+	if len(cfg.IgnorePatterns) == 0 {
+		cfg.IgnorePatterns = []string{"node_modules", "vendor", ".git", "dist", "build", "out"}
+	}
+	// Default to recursive watching for existing profiles that do not yet have
+	// watch config persisted. This is the safer AI-context-manager default.
+	if !cfg.Recursive && isZeroWatchConfig(m.Profile.Watch) {
+		cfg.Recursive = true
+	}
+	return cfg
+}
+
+func isZeroWatchConfig(cfg profile.Watch) bool {
+	return !cfg.Recursive &&
+		cfg.DebounceDuration == 0 &&
+		cfg.FullResyncEvery == 0 &&
+		len(cfg.IgnorePatterns) == 0 &&
+		len(cfg.MatchPatterns) == 0
+}

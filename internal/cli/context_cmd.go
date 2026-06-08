@@ -3,8 +3,10 @@ package cli
 import (
 	"context"
 	"fmt"
+	"io/fs"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
@@ -146,12 +148,60 @@ Press Ctrl+C to stop.`,
 				return fmt.Errorf("watch: %w", err)
 			}
 
+			// Get watch config from profile
+			watchCfg := mgr.GetWatchConfig()
+
+			// CLI flags override config
+			recursive, _ := cmd.Flags().GetBool("recursive")
+			if !cmd.Flags().Changed("recursive") {
+				recursive = watchCfg.Recursive
+			}
+			debounceStr, _ := cmd.Flags().GetString("debounce")
+			var debounce time.Duration
+			if debounceStr != "" {
+				debounce, err = time.ParseDuration(debounceStr)
+				if err != nil {
+					return fmt.Errorf("watch: invalid debounce duration: %w", err)
+				}
+			} else {
+				// Use config if not set via flag
+				if watchCfg.DebounceDuration > 0 {
+					debounce = watchCfg.DebounceDuration
+				} else {
+					debounce = 2 * time.Second // default
+				}
+			}
+
+			// Get ignore patterns from CLI (can be specified multiple times)
+			cliIgnore, _ := cmd.Flags().GetStringSlice("ignore")
+			// Merge with config ignore patterns (CLI gets appended)
+			ignorePatterns := append(watchCfg.IgnorePatterns, cliIgnore...)
+
+			// Get match patterns from CLI
+			cliMatch, _ := cmd.Flags().GetStringSlice("match")
+			// Merge with config match patterns (CLI gets appended)
+			matchPatterns := append(watchCfg.MatchPatterns, cliMatch...)
+
+			// Full resync interval
+			fullResyncEvery := watchCfg.FullResyncEvery
+			if override, _ := cmd.Flags().GetString("full-resync-every"); override != "" {
+				fullResyncEvery, err = time.ParseDuration(override)
+				if err != nil {
+					return fmt.Errorf("watch: invalid full-resync-every duration: %w", err)
+				}
+			}
+
 			// Initial sync
+			dryRun, _ := cmd.Flags().GetBool("dry-run")
 			fmt.Fprintln(cmd.OutOrStdout(), "Performing initial sync...")
-			if _, err := mgr.Sync(false, false); err != nil {
+			if _, err := mgr.Sync(false, dryRun); err != nil {
 				return fmt.Errorf("watch: initial sync failed: %w", err)
 			}
-			fmt.Fprintln(cmd.OutOrStdout(), "Initial sync complete. Watching for changes...")
+			if dryRun {
+				fmt.Fprintln(cmd.OutOrStdout(), "Initial sync complete (dry-run). Watching for changes...")
+			} else {
+				fmt.Fprintln(cmd.OutOrStdout(), "Initial sync complete. Watching for changes...")
+			}
 
 			// Set up file watcher
 			watcher, err := fsnotify.NewWatcher()
@@ -165,17 +215,44 @@ Press Ctrl+C to stop.`,
 			if repoPath == "" {
 				return fmt.Errorf("watch: repo_path not set in profile")
 			}
+
+			// Add root and optionally subdirectories
 			if err := watcher.Add(repoPath); err != nil {
 				return fmt.Errorf("watch: adding root to watcher: %w", err)
 			}
 
+			if recursive {
+				// Walk directory tree and add all subdirs to watcher
+				err := filepath.WalkDir(repoPath, func(path string, d fs.DirEntry, err error) error {
+					if err != nil {
+						return err
+					}
+					if !d.IsDir() {
+						return nil // only process directories
+					}
+					// Get relative path for logging? not needed
+					if path == repoPath {
+						return nil // root is already watched
+					}
+					base := filepath.Base(path)
+					if !contextmgr.ShouldWatchDir(base, ignorePatterns) {
+						return filepath.SkipDir // don't recurse into ignored dirs
+					}
+					if err := watcher.Add(path); err != nil {
+						// Log but don't fail - maybe permission issue
+						fmt.Fprintf(cmd.OutOrStderr(), "Warning: could not watch %s: %v\n", path, err)
+					}
+					return nil
+				})
+				if err != nil {
+					return fmt.Errorf("watch: walking directory tree: %w", err)
+				}
+			}
+
 			// Track last sync time to debounce
 			lastSync := time.Now()
-			syncTicker := time.NewTicker(30 * time.Second) // Full resync every 30s
+			syncTicker := time.NewTicker(fullResyncEvery) // Full resync every N seconds from config
 			defer syncTicker.Stop()
-
-			// Debounce duration
-			debounce := 2 * time.Second
 
 			// Event loop
 			for {
@@ -192,15 +269,20 @@ Press Ctrl+C to stop.`,
 						continue
 					}
 					// Check if event is relevant (manifest files, source roots, etc.)
-					if isRelevantEvent(event.Name) {
+					if contextmgr.IsRelevantEventWithPatterns(event.Name, ignorePatterns, matchPatterns) {
 						// Debounce: only sync if enough time has passed since last sync
 						if time.Since(lastSync) > (debounce + time.Second) {
-							fmt.Fprintf(cmd.OutOrStdout(), "[%s] Change detected: %s\n",
-								time.Now().Format("15:04:05"), event.Name)
-							if _, err := mgr.Sync(false, false); err != nil {
-								fmt.Fprintf(cmd.OutOrStdout(), "Sync failed: %v\n", err)
+							if dryRun {
+								fmt.Fprintf(cmd.OutOrStdout(), "[%s] [Dry Run] Change detected: %s. Would sync context files.\n",
+									time.Now().Format("15:04:05"), event.Name)
 							} else {
-								lastSync = time.Now()
+								fmt.Fprintf(cmd.OutOrStdout(), "[%s] Change detected: %s\n",
+									time.Now().Format("15:04:05"), event.Name)
+								if _, err := mgr.Sync(false, false); err != nil {
+									fmt.Fprintf(cmd.OutOrStdout(), "Sync failed: %v\n", err)
+								} else {
+									lastSync = time.Now()
+								}
 							}
 						}
 					}
@@ -211,18 +293,29 @@ Press Ctrl+C to stop.`,
 					fmt.Fprintf(cmd.OutOrStderr(), "Watcher error: %v\n", err)
 				case <-syncTicker.C:
 					// Periodic full resync
-					fmt.Fprintf(cmd.OutOrStdout(), "[%s] Periodic resync...\n",
-						time.Now().Format("15:04:05"))
-					if _, err := mgr.Sync(false, false); err != nil {
-						fmt.Fprintf(cmd.OutOrStdout(), "Periodic sync failed: %v\n", err)
+					if dryRun {
+						fmt.Fprintf(cmd.OutOrStdout(), "[%s] [Dry Run] Periodic resync... Would sync context files.\n",
+							time.Now().Format("15:04:05"))
 					} else {
-						lastSync = time.Now()
+						fmt.Fprintf(cmd.OutOrStdout(), "[%s] Periodic resync...\n",
+							time.Now().Format("15:04:05"))
+						if _, err := mgr.Sync(false, false); err != nil {
+							fmt.Fprintf(cmd.OutOrStdout(), "Periodic sync failed: %v\n", err)
+						} else {
+							lastSync = time.Now()
+						}
 					}
 				}
 			}
 		},
 		SilenceUsage: true,
 	}
+	cmd.Flags().Bool("dry-run", false, "Show what would be written without making changes")
+	cmd.Flags().Bool("recursive", true, "Watch directories recursively")
+	cmd.Flags().String("debounce", "", "Debounce duration (e.g., 2s, 500ms). Overrides profile config.")
+	cmd.Flags().String("full-resync-every", "", "Periodic full resync interval (e.g., 30s, 1m). Overrides profile config.")
+	cmd.Flags().StringSlice("ignore", []string{}, "Additional directory/file names to ignore (can specify multiple times)")
+	cmd.Flags().StringSlice("match", []string{}, "Additional patterns to match for relevance (can specify multiple times)")
 	return cmd
 }
 
@@ -302,7 +395,6 @@ and whether any files are outdated or missing.`,
 }
 
 // Helper: determine if a file change is relevant for triggering a sync.
-// This list should match what the discovery detectors look at.
 func isRelevantEvent(path string) bool {
 	return contextmgr.IsRelevantEvent(path)
 }
