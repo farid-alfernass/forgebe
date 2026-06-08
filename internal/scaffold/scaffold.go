@@ -22,6 +22,16 @@ const (
 	TemplateJavaSpring    TemplateType = "java-spring"
 )
 
+const (
+	pathGitignore    = ".gitignore"
+	pathReadme       = "README.md"
+	pathGoMod        = "go.mod"
+	pathMakefile     = "Makefile"
+	pathPackageJson  = "package.json"
+	pathTsConfig     = "tsconfig.json"
+	pathRequirements = "requirements.txt"
+)
+
 // File represents a file to be generated.
 type File struct {
 	Path    string
@@ -125,10 +135,10 @@ func (g *Generator) generateGoService() []File {
 		{Path: "internal/handler/handler.go", Content: g.goServiceHandler()},
 		{Path: "internal/service", IsDir: true},
 		{Path: "internal/service/service.go", Content: g.goServiceService()},
-		{Path: "go.mod", Content: g.goMod(projectName)},
-		{Path: "Makefile", Content: g.goMakefile(projectName)},
-		{Path: ".gitignore", Content: goGitignore},
-		{Path: "README.md", Content: g.readme(projectName)},
+		{Path: pathGoMod, Content: g.goMod(projectName)},
+		{Path: pathMakefile, Content: g.goMakefile(projectName)},
+		{Path: pathGitignore, Content: goGitignore},
+		{Path: pathReadme, Content: g.readme(projectName)},
 	}
 }
 
@@ -144,10 +154,10 @@ func (g *Generator) generateGoAPI() []File {
 		{Path: "internal/models/models.go", Content: goAPIModels},
 		{Path: "internal/repository", IsDir: true},
 		{Path: "internal/repository/repository.go", Content: goAPIRepository},
-		{Path: "go.mod", Content: g.goMod(projectName)},
-		{Path: "Makefile", Content: g.goMakefile(projectName)},
-		{Path: ".gitignore", Content: goGitignore},
-		{Path: "README.md", Content: g.readme(projectName)},
+		{Path: pathGoMod, Content: g.goMod(projectName)},
+		{Path: pathMakefile, Content: g.goMakefile(projectName)},
+		{Path: pathGitignore, Content: goGitignore},
+		{Path: pathReadme, Content: g.readme(projectName)},
 	}
 }
 
@@ -161,10 +171,10 @@ func (g *Generator) generateNodeExpress() []File {
 		{Path: "src/routes/index.ts", Content: nodeExpressRoutes},
 		{Path: "src/middleware", IsDir: true},
 		{Path: "src/middleware/errorHandler.ts", Content: nodeExpressErrorHandler},
-		{Path: "package.json", Content: g.nodePackageJson(projectName)},
-		{Path: "tsconfig.json", Content: nodeTsconfig},
-		{Path: ".gitignore", Content: nodeGitignore},
-		{Path: "README.md", Content: g.readme(projectName)},
+		{Path: pathPackageJson, Content: g.nodePackageJson(projectName)},
+		{Path: pathTsConfig, Content: nodeTsconfig},
+		{Path: pathGitignore, Content: nodeGitignore},
+		{Path: pathReadme, Content: g.readme(projectName)},
 	}
 }
 
@@ -181,9 +191,9 @@ func (g *Generator) generatePythonFastAPI() []File {
 		{Path: "app/models", IsDir: true},
 		{Path: "app/models/__init__.py", Content: ""},
 		{Path: "app/models/schemas.py", Content: pythonFastAPISchemas},
-		{Path: "requirements.txt", Content: pythonRequirements},
-		{Path: ".gitignore", Content: pythonGitignore},
-		{Path: "README.md", Content: g.readme(projectName)},
+		{Path: pathRequirements, Content: pythonRequirements},
+		{Path: pathGitignore, Content: pythonGitignore},
+		{Path: pathReadme, Content: g.readme(projectName)},
 	}
 }
 
