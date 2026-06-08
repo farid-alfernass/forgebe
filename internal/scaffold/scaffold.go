@@ -597,3 +597,14 @@ venv/
 .env
 .DS_Store
 `
+
+// Templates returns a list of available template names.
+func Templates() []string {
+	return []string{
+		string(TemplateGoService),
+		string(TemplateGoAPI),
+		string(TemplateNodeExpress),
+		string(TemplateNodeNestJS),
+		string(TemplatePythonFastAPI),
+	}
+}

@@ -7,29 +7,23 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var supportedTemplates = []string{
-	"go-service",
-	"go-api",
-	"node-express",
-	"node-nestjs",
-	"python-fastapi",
-}
-
 func newScaffoldCmd() *cobra.Command {
 	var (
-		outputDir    string
-		templateType string
-		force        bool
-		dryRunMode   bool
+		outputDir     string
+		templateType  string
+		force         bool
+		dryRunMode    bool
+		listTemplates bool
 	)
 
 	cmd := &cobra.Command{
 		Use:   "scaffold [project-id]",
-		Short: "Generate project boilerplate from profile or template",
-		Long: `Generate a project structure based on an existing ForgeBE profile
-or a specified template.
+		Short: "Generate boilerplate code structure based on profile or template",
+		Long: `Generate directory structure and starter files for a project.
+By default, it infers the template from the project profile, but you can
+explicitly specify a template using --template.
 
-Templates:
+Supported templates:
   go-service      Go service with layered architecture
   go-api          Go API with handlers, models, repository
   node-express    Node.js + TypeScript + Express
@@ -38,6 +32,14 @@ Templates:
 `,
 		Args: cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if listTemplates {
+				fmt.Fprintln(cmd.OutOrStdout(), "Available templates:")
+				for _, t := range scaffold.Templates() {
+					fmt.Fprintf(cmd.OutOrStdout(), "  - %s\n", t)
+				}
+				return nil
+			}
+
 			projectID, err := resolveProjectIDArg(args)
 			if err != nil {
 				return fmt.Errorf("cannot resolve project: %w", err)
@@ -48,32 +50,14 @@ Templates:
 				return fmt.Errorf("project %q not found: %w", projectID, err)
 			}
 
-			// Resolve template
-			var tmpl scaffold.TemplateType
-			if templateType != "" {
-				tmpl = scaffold.TemplateType(templateType)
-			}
-
-			if outputDir == "" {
-				outputDir = proj.Metadata.RepoPath
-			}
-
-			// Generate scaffolding
-			gen := scaffold.NewGenerator(proj, outputDir, tmpl, force, dryRunMode)
+			gen := scaffold.NewGenerator(proj, outputDir, scaffold.TemplateType(templateType), force, dryRunMode)
 			files, err := gen.Generate()
 			if err != nil {
-				return fmt.Errorf("scaffold failed: %w", err)
+				return err
 			}
 
 			if dryRunMode {
-				fmt.Fprintf(cmd.OutOrStdout(), "Dry-run: %d file(s) to generate\n", len(files))
-				for _, f := range files {
-					if f.IsDir {
-						fmt.Fprintf(cmd.OutOrStdout(), "  %s/\n", f.Path)
-					} else {
-						fmt.Fprintf(cmd.OutOrStdout(), "  %s\n", f.Path)
-					}
-				}
+				fmt.Fprintf(cmd.OutOrStdout(), "Dry-run: %d file(s) to generate in %s\n", len(files), outputDir)
 				return nil
 			}
 
@@ -83,21 +67,11 @@ Templates:
 		SilenceUsage: true,
 	}
 
-	cmd.Flags().StringVarP(&outputDir, "output", "o", "", "Output directory (default: project repo path)")
-	cmd.Flags().StringVarP(&templateType, "template", "t", "", fmt.Sprintf("Template type (%s)", joinStrings(supportedTemplates)))
-	cmd.Flags().BoolVar(&force, "force", false, "Overwrite existing files")
-	cmd.Flags().BoolVar(&dryRunMode, "dry-run", false, "Preview files to generate without writing")
+	cmd.Flags().StringVarP(&outputDir, "output", "o", ".", "Output directory for generated files")
+	cmd.Flags().StringVarP(&templateType, "template", "t", "", "Specify template name (e.g., go-service, node-express). If omitted, infers from profile.")
+	cmd.Flags().BoolVarP(&force, "force", "f", false, "Overwrite existing files")
+	cmd.Flags().BoolVarP(&dryRunMode, "dry-run", "d", false, "Preview files to be generated without writing them")
+	cmd.Flags().BoolVar(&listTemplates, "list-templates", false, "List all available templates")
 
 	return cmd
-}
-
-func joinStrings(items []string) string {
-	result := ""
-	for i, s := range items {
-		if i > 0 {
-			result += ", "
-		}
-		result += s
-	}
-	return result
 }
