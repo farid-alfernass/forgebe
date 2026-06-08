@@ -16,6 +16,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.3.0] — 2026-06-08
+
+### Added
+
+#### Documentation Overhaul
+- **Blueprint Guide** (`docs/blueprint-guide.md`) — Deep dive metodologi AI-Native Backend Engineering: TDD-AI Loop, Context Layer, Quality Gates, Architectural Framework, Project Lifecycle, Security, Extension Points
+- **Real-World Examples** (`docs/real-world-examples.md`) — 5 skenario praktis: Go Payment Gateway, Node.js E-Commerce API, Java monolith adoption, multi-team setup, complete CI/CD pipeline
+- **Release Guide** (`docs/release-guide.md`) — GitHub release process, versioning, binary distribution, automation
+- **Enhanced Contributing Guide** (`CONTRIBUTING.md`) — Detailed guidelines: principles, setup, quality gates, testing, coding conventions, PR checklist, release process
+
+#### Phase 10 Feature Expansion (Complete)
+- `forgebe scaffold` — Project scaffolding with templates (go-service, go-api, node-express, node-nestjs, python-fastapi)
+- `forgebe adopt` — Adopt existing projects with automatic discovery
+- `forgebe verify` — Policy verification engine (8 policies: testing, dependency, architecture, sensitive areas, source roots, forbidden paths)
+- `forgebe check` — Health check / quality gate for pre-commit and CI
+- `forgebe prompt` — AI prompt generator (implement, review, debug, plan modes)
+
+### Fixed
+- Code duplication in scaffold generator reduced from 4.6% to 1.2%
+- Security: pinned GitHub Actions to full SHA (`ci.yml`, `release.yml`)
+
+### Changed
+- README restructured with problem-solution approach
+- Documentation reorganized for better navigation
+- Architecture docs updated with Phase 10 components
+
+### Removed
+- Outdated planning docs (`docs/plans/`)
+- Replaced `docs/phase10-feature-expansion.md` with blueprint-guide
+- Removed `docs/brew-tap.md` and `docs/contract-extractor-roadmap.md`
+
+### Quality Metrics
+- **Coverage**: 81.5% (target >=80%) ✅
+- **Duplicated Lines**: 1.2% (threshold <3%) ✅
+- **Sonar Quality Gate**: OK ✅
+- **All Tests**: PASS ✅
+
+---
+
 ## [1.0.0] — 2026-06-07
 
 ### Added
