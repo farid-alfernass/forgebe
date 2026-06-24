@@ -16,7 +16,9 @@ import (
 
 // FileChange describes a single changed file from a git diff.
 type FileChange struct {
-	Path    string `json:"path"`
+	Path string `json:"path"`
+	// OldPath is reserved for future rename support; the current implementation
+	// passes --no-renames, so it stays empty.
 	OldPath string `json:"old_path,omitempty"`
 	Status  string `json:"status"` // A, M, D
 	Added   int    `json:"added"`
@@ -80,7 +82,7 @@ func diffRange(repoPath string, target ...string) ([]FileChange, error) {
 }
 
 func mergeDiff(nameStatus, numStat string) []FileChange {
-	order := []string{}
+	var order []string
 	byPath := map[string]*FileChange{}
 	get := func(path string) *FileChange {
 		if fc, ok := byPath[path]; ok {
@@ -145,7 +147,11 @@ func countLines(repoPath, rel string) int {
 	if err != nil || len(data) == 0 {
 		return 0
 	}
-	return bytes.Count(data, []byte{'\n'})
+	n := bytes.Count(data, []byte{'\n'})
+	if data[len(data)-1] != '\n' {
+		n++ // count the final line that lacks a trailing newline
+	}
+	return n
 }
 
 func atoiSafe(s string) int {

@@ -10,7 +10,7 @@ import (
 func initRepo(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
-	cmd := exec.Command("git", "-C", dir, "init")
+	cmd := exec.Command("git", "-C", dir, "-c", "init.defaultBranch=main", "init")
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("git init: %v: %s", err, out)
 	}
@@ -100,5 +100,51 @@ func TestChangedFiles_Staged(t *testing.T) {
 	}
 	if !found {
 		t.Errorf("expected b.go in staged changes, got %+v", changes)
+	}
+}
+
+func TestChangedFiles_Since(t *testing.T) {
+	dir := initRepo(t)
+	write(t, dir, "a.go", "package a\n")
+	gitRun(t, dir, "add", ".")
+	gitRun(t, dir, "commit", "-m", "first")
+	write(t, dir, "b.go", "package b\n")
+	gitRun(t, dir, "add", ".")
+	gitRun(t, dir, "commit", "-m", "second")
+
+	changes, err := ChangedFiles(dir, RangeSpec{Since: "HEAD~1"})
+	if err != nil {
+		t.Fatalf("ChangedFiles since: %v", err)
+	}
+	found := false
+	for _, c := range changes {
+		if c.Path == "b.go" {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected b.go in since-range changes, got %+v", changes)
+	}
+}
+
+func TestChangedFiles_DeletedFile(t *testing.T) {
+	dir := initRepo(t)
+	write(t, dir, "gone.go", "package gone\n")
+	gitRun(t, dir, "add", ".")
+	gitRun(t, dir, "commit", "-m", "init")
+	gitRun(t, dir, "rm", "gone.go")
+
+	changes, err := ChangedFiles(dir, RangeSpec{Staged: true})
+	if err != nil {
+		t.Fatalf("ChangedFiles: %v", err)
+	}
+	var st string
+	for _, c := range changes {
+		if c.Path == "gone.go" {
+			st = c.Status
+		}
+	}
+	if st != "D" {
+		t.Errorf("expected status D for deleted file, got %q", st)
 	}
 }
