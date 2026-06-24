@@ -98,3 +98,33 @@ func TestRule_MissingTest_DisabledWhenTestingNotRequired(t *testing.T) {
 		t.Fatalf("expected no missing_test when testing not required, got %+v", got)
 	}
 }
+
+func TestRule_MissingTest_TestFileNotFlagged(t *testing.T) {
+	p := profile.NewSampleProfile()
+	p.Policy.Testing.Required = true
+	p.Areas.SourceRoots = []string{"internal"}
+	p.Areas.TestRoots = []string{"internal"}
+	changes := []git.FileChange{
+		{Path: "internal/foo/bar_test.go", Status: "A", Added: 10},
+	}
+	r, _ := NewReviewer(&p, "", changes)
+	if got := findingsByRule(r.Run(), "missing_test"); len(got) != 0 {
+		t.Fatalf("a *_test.go file must never be flagged as missing a test, got %+v", got)
+	}
+}
+
+func TestRule_MissingTest_UnitRequiredOnly(t *testing.T) {
+	p := profile.NewSampleProfile()
+	p.Policy.Testing.Required = false
+	p.Policy.Testing.UnitRequired = true
+	p.Areas.SourceRoots = []string{"internal"}
+	p.Areas.TestRoots = []string{"internal"}
+	changes := []git.FileChange{
+		{Path: "internal/payment/charge.go", Status: "A", Added: 20},
+	}
+	r, _ := NewReviewer(&p, "", changes)
+	got := findingsByRule(r.Run(), "missing_test")
+	if len(got) != 1 || got[0].Severity != SeverityWarn {
+		t.Fatalf("expected 1 WARN missing_test when only UnitRequired, got %+v", got)
+	}
+}
