@@ -508,3 +508,28 @@ Ensure `~/.forgebe/` is writable:
 mkdir -p ~/.forgebe/exports
 chmod 700 ~/.forgebe
 ```
+
+## `forgebe review`
+
+Compare the current git diff against your project policy and print an
+awareness report — what changed and what needs your conscious review.
+Works with any AI tool because it inspects the diff, not the agent.
+
+```bash
+forgebe review                 # working tree vs HEAD (informational, exit 0)
+forgebe review --staged        # staged changes (for pre-commit)
+forgebe review --since main    # changes since a ref (for CI/PR)
+forgebe review --json          # machine-readable output
+forgebe review --strict        # exit 1 if any FAIL finding (gate mode)
+```
+
+Rules checked (mapped to your profile policy):
+
+| Rule | Policy source | Severity |
+|------|---------------|----------|
+| `forbidden_path` | `policy.changes.forbidden_paths` | FAIL |
+| `sensitive_area` | `areas.sensitive_areas` / `areas.public_apis` / `policy.changes.require_approval` | WARN |
+| `dependency_added` | `policy.dependencies.allow_addition` / `require_approval` | FAIL/WARN |
+| `dependency_forbidden` | `policy.dependencies.forbidden` | FAIL |
+| `missing_test` | `policy.testing.required` + `areas.test_roots` | WARN |
+| `summary` | — | INFO |

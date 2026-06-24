@@ -148,6 +148,22 @@ forgebe brief claude
 └───────────────────────────────────────────────────┘
 ```
 
+### Awareness Review
+
+Setelah AI mengubah kode, jaga agar kamu tetap *aware*:
+
+```bash
+# Lihat apa yang berubah & apa yang melenceng dari policy-mu
+forgebe review
+
+# Mode gate untuk pre-commit / CI
+forgebe review --strict
+```
+
+`forgebe review` membandingkan git diff dengan policy project — bekerja dengan
+AI tool apa pun (Claude, Cursor, Copilot, Hermes), karena yang diperiksa adalah
+perubahannya, bukan agennya.
+
 ### Menggunakan Prompt Generator
 
 ForgeBE punya prompt generator yang menghasilkan prompt konteks-spesifik untuk berbagai mode pekerjaan:
