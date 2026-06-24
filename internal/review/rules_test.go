@@ -57,3 +57,44 @@ func TestRule_DependencyAdded_IgnoresNonManifest(t *testing.T) {
 		t.Fatalf("expected no dependency findings for non-manifest, got %+v", got)
 	}
 }
+
+func TestRule_MissingTest_Flagged(t *testing.T) {
+	p := profile.NewSampleProfile()
+	p.Policy.Testing.Required = true
+	p.Areas.SourceRoots = []string{"internal"}
+	p.Areas.TestRoots = []string{"internal"}
+	changes := []git.FileChange{
+		{Path: "internal/payment/charge.go", Status: "A", Added: 20},
+	}
+	r, _ := NewReviewer(&p, "", changes)
+	got := findingsByRule(r.Run(), "missing_test")
+	if len(got) != 1 || got[0].Severity != SeverityWarn {
+		t.Fatalf("expected 1 WARN missing_test, got %+v", got)
+	}
+}
+
+func TestRule_MissingTest_SatisfiedBySiblingTest(t *testing.T) {
+	p := profile.NewSampleProfile()
+	p.Policy.Testing.Required = true
+	p.Areas.SourceRoots = []string{"internal"}
+	p.Areas.TestRoots = []string{"internal"}
+	changes := []git.FileChange{
+		{Path: "internal/payment/charge.go", Status: "M", Added: 10},
+		{Path: "internal/payment/charge_test.go", Status: "M", Added: 15},
+	}
+	r, _ := NewReviewer(&p, "", changes)
+	if got := findingsByRule(r.Run(), "missing_test"); len(got) != 0 {
+		t.Fatalf("expected no missing_test when sibling test changed, got %+v", got)
+	}
+}
+
+func TestRule_MissingTest_DisabledWhenTestingNotRequired(t *testing.T) {
+	p := profile.NewSampleProfile()
+	p.Policy.Testing.Required = false
+	p.Policy.Testing.UnitRequired = false
+	changes := []git.FileChange{{Path: "internal/foo.go", Status: "A", Added: 5}}
+	r, _ := NewReviewer(&p, "", changes)
+	if got := findingsByRule(r.Run(), "missing_test"); len(got) != 0 {
+		t.Fatalf("expected no missing_test when testing not required, got %+v", got)
+	}
+}

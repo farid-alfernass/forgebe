@@ -144,3 +144,82 @@ func manifestContains(repoPath, rel, token string) bool {
 	}
 	return strings.Contains(string(data), token)
 }
+
+var codeExtensions = map[string]bool{
+	".go": true, ".js": true, ".ts": true, ".jsx": true, ".tsx": true,
+	".py": true, ".rb": true, ".java": true, ".rs": true, ".kt": true, ".php": true,
+}
+
+func isSourceFile(p string) bool {
+	return codeExtensions[strings.ToLower(filepath.Ext(p))]
+}
+
+func isTestFile(p string) bool {
+	base := strings.ToLower(filepath.Base(p))
+	return strings.HasSuffix(base, "_test.go") ||
+		strings.HasSuffix(base, "_test.py") ||
+		strings.HasPrefix(base, "test_") ||
+		strings.Contains(base, ".test.") ||
+		strings.Contains(base, ".spec.")
+}
+
+func underAnyRoot(p string, roots []string) bool {
+	p = filepath.ToSlash(p)
+	for _, root := range roots {
+		root = strings.Trim(filepath.ToSlash(root), "/")
+		if root == "" {
+			continue
+		}
+		if p == root || strings.HasPrefix(p, root+"/") {
+			return true
+		}
+	}
+	return false
+}
+
+// testKey reduces a path to a key shared by a source file and its sibling test
+// (same directory, same base name). MVP heuristic — not call-graph analysis.
+func testKey(p string) string {
+	p = filepath.ToSlash(p)
+	dir := filepath.Dir(p)
+	name := strings.TrimSuffix(filepath.Base(p), filepath.Ext(p))
+	name = strings.TrimSuffix(name, "_test")
+	name = strings.TrimSuffix(name, ".test")
+	name = strings.TrimSuffix(name, ".spec")
+	name = strings.TrimPrefix(name, "test_")
+	return dir + "/" + name
+}
+
+func (r *Reviewer) ruleMissingTest() []Finding {
+	t := r.profile.Policy.Testing
+	if !t.Required && !t.UnitRequired {
+		return nil
+	}
+
+	testChanged := map[string]bool{}
+	for _, c := range r.changes {
+		if isTestFile(c.Path) || (underAnyRoot(c.Path, r.profile.Areas.TestRoots) && !isSourceFile(c.Path)) {
+			testChanged[testKey(c.Path)] = true
+		}
+	}
+
+	var out []Finding
+	for _, c := range r.changes {
+		if c.Status == "D" || !isSourceFile(c.Path) || isTestFile(c.Path) {
+			continue
+		}
+		if len(r.profile.Areas.SourceRoots) > 0 && !underAnyRoot(c.Path, r.profile.Areas.SourceRoots) {
+			continue
+		}
+		if testChanged[testKey(c.Path)] {
+			continue
+		}
+		out = append(out, Finding{
+			Rule:     "missing_test",
+			Severity: SeverityWarn,
+			Path:     c.Path,
+			Message:  fmt.Sprintf("%s changed without a corresponding test in the same change", c.Path),
+		})
+	}
+	return out
+}
