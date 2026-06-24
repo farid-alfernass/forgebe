@@ -46,5 +46,6 @@ func (r *Reviewer) Run() []Finding {
 	var findings []Finding
 	findings = append(findings, r.ruleForbiddenPath()...)
 	findings = append(findings, r.ruleSensitiveArea()...)
+	findings = append(findings, r.ruleDependency()...)
 	return findings
 }

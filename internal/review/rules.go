@@ -2,6 +2,7 @@ package review
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 )
@@ -74,4 +75,72 @@ func (r *Reviewer) ruleSensitiveArea() []Finding {
 		}
 	}
 	return out
+}
+
+// manifestFiles maps a dependency manifest filename to its ecosystem.
+var manifestFiles = map[string]string{
+	"go.mod":           "go",
+	"package.json":     "node",
+	"requirements.txt": "python",
+	"pyproject.toml":   "python",
+	"Cargo.toml":       "rust",
+	"pom.xml":          "java",
+	"build.gradle":     "java",
+}
+
+func (r *Reviewer) ruleDependency() []Finding {
+	dep := r.profile.Policy.Dependencies
+	var out []Finding
+	for _, c := range r.changes {
+		base := filepath.Base(filepath.ToSlash(c.Path))
+		if _, ok := manifestFiles[base]; !ok {
+			continue
+		}
+		if c.Status != "A" && c.Added == 0 {
+			continue
+		}
+
+		switch {
+		case !dep.AllowAddition:
+			out = append(out, Finding{
+				Rule:     "dependency_added",
+				Severity: SeverityFail,
+				Path:     c.Path,
+				Message:  fmt.Sprintf("%s changed but dependency additions are not allowed", c.Path),
+			})
+		case dep.RequireApproval:
+			out = append(out, Finding{
+				Rule:     "dependency_added",
+				Severity: SeverityWarn,
+				Path:     c.Path,
+				Message:  fmt.Sprintf("%s changed — new dependencies require your approval", c.Path),
+			})
+		}
+
+		for _, forbidden := range dep.Forbidden {
+			if forbidden == "" {
+				continue
+			}
+			if manifestContains(r.repoPath, c.Path, forbidden) {
+				out = append(out, Finding{
+					Rule:     "dependency_forbidden",
+					Severity: SeverityFail,
+					Path:     c.Path,
+					Message:  fmt.Sprintf("forbidden dependency %q present in %s", forbidden, c.Path),
+				})
+			}
+		}
+	}
+	return out
+}
+
+func manifestContains(repoPath, rel, token string) bool {
+	if repoPath == "" {
+		return false
+	}
+	data, err := os.ReadFile(filepath.Join(repoPath, rel))
+	if err != nil {
+		return false
+	}
+	return strings.Contains(string(data), token)
 }
