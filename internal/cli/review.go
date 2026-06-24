@@ -41,7 +41,11 @@ inspects the diff, not the agent.`,
 
 			repoPath := proj.Metadata.RepoPath
 			if repoPath == "" {
-				repoPath, _ = os.Getwd()
+				wd, err := os.Getwd()
+				if err != nil {
+					return fmt.Errorf("review: cannot determine working directory: %w", err)
+				}
+				repoPath = wd
 			}
 			if !git.IsRepo(repoPath) {
 				return fmt.Errorf("review: %s is not a git repository", repoPath)
@@ -55,7 +59,7 @@ inspects the diff, not the agent.`,
 
 			reviewer, err := review.NewReviewer(proj, repoPath, changes)
 			if err != nil {
-				return err
+				return fmt.Errorf("review: %w", err)
 			}
 
 			report := review.NewReport(reviewer.Run(), rangeLabel(spec))
