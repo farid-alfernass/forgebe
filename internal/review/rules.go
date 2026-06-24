@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 )
 
@@ -222,4 +223,35 @@ func (r *Reviewer) ruleMissingTest() []Finding {
 		})
 	}
 	return out
+}
+
+func topDir(p string) string {
+	p = filepath.ToSlash(p)
+	if i := strings.Index(p, "/"); i >= 0 {
+		return p[:i]
+	}
+	return "."
+}
+
+func (r *Reviewer) ruleSummary() []Finding {
+	if len(r.changes) == 0 {
+		return []Finding{{Rule: "summary", Severity: SeverityInfo, Message: "no changes detected"}}
+	}
+	totalAdded, totalDeleted := 0, 0
+	groups := map[string]int{}
+	for _, c := range r.changes {
+		totalAdded += c.Added
+		totalDeleted += c.Deleted
+		groups[topDir(c.Path)]++
+	}
+
+	parts := make([]string, 0, len(groups))
+	for dir, n := range groups {
+		parts = append(parts, fmt.Sprintf("%s:%d", dir, n))
+	}
+	sort.Strings(parts)
+
+	msg := fmt.Sprintf("%d files changed (+%d / -%d)  [%s]",
+		len(r.changes), totalAdded, totalDeleted, strings.Join(parts, " "))
+	return []Finding{{Rule: "summary", Severity: SeverityInfo, Message: msg}}
 }
